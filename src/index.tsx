@@ -1,16 +1,20 @@
-import Didact from './lib/Didact';
+import * as React from './react';
+
+import * as ReactDOM from './react-dom';
 
 const App = (props: { name: string }) => {
-  const [v, setV] = Didact.useState(1);
+  //   const [v, setV] = React.useState(1);
   return (
-    <div onClick={() => setV((v: number) => v + 2)}>
+    <div
+    // onClick={() => setV((v: number) => v + 2)}
+    >
       <h1 title="foo">Hello {props.name}</h1>
-      <div>{v}</div>
+      {/* <div>{v}</div> */}
     </div>
   );
 };
 
 console.log(App);
 
-Didact.render(<App name="1"></App>, document.getElementById('root'));
+ReactDOM.render(<App name="1"></App>, document.getElementById('root'));
 // ReactDOM.render(<App name="1"></App>, document.getElementById('root'));
