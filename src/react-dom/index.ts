@@ -1,1 +1,1 @@
-export { createRoot, hydrateRoot, flushSync, hydrate, render } from './ReactDOM';
+export { createRoot, hydrateRoot, flushSync, hydrate, render } from './ReactDOM.ts';
