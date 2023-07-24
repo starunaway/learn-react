@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
 
 module.exports = {
   mode: 'development',
@@ -8,10 +9,11 @@ module.exports = {
     path: path.resolve(__dirname, 'dist'),
     filename: 'bundle.js',
   },
-  // TODO: support extensions && default index.xx
-  //   resolve: {
-  //     extensions: ['.ts', '.tsx'],
-  //   },
+  resolve: {
+    // 默认需要添加 ".js" ，否则node_modules 里面的内容会找不到
+    // extensions: ['.ts', '.tsx', '.js'],
+    extensions: ['.ts', '.tsx', '.js', '.json'],
+  },
   module: {
     rules: [
       {
@@ -28,6 +30,7 @@ module.exports = {
   },
 
   plugins: [
+    new webpack.HotModuleReplacementPlugin(),
     new HtmlWebpackPlugin({
       template: './index.html',
     }),
@@ -38,6 +41,7 @@ module.exports = {
     compress: false,
     port: 4000,
     open: true,
+    hot: true,
     client: {
       logging: 'none',
     },

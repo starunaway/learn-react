@@ -9,6 +9,7 @@ const createTextElement = (text: string | number) => {
 };
 
 export function createElement(type: any, props: Record<string, any>, ...children: any) {
+  console.log('createElement');
   return {
     type,
     props: {

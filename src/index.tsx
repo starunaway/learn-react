@@ -1,6 +1,6 @@
-// import * as React from './react';
+import * as React from './react';
 
-import * as ReactDOM from './react-dom/index.ts';
+import * as ReactDOM from './react-dom';
 
 const App = (props: { name: string }) => {
   //   const [v, setV] = React.useState(1);
@@ -16,5 +16,5 @@ const App = (props: { name: string }) => {
 
 console.log(App);
 
-// ReactDOM.render(<App name="1"></App>, document.getElementById('root'));
-ReactDOM.render(1, 2);
+ReactDOM.render(<App name="1"></App>, document.getElementById('root'));
+// ReactDOM.render(1, 2);
