@@ -16,5 +16,5 @@ const App = (props: { name: string }) => {
 
 console.log(App);
 
-ReactDOM.render(<App name="1"></App>, document.getElementById('root'));
+ReactDOM.render(<App name="1"></App>, document.getElementById('root')!);
 // ReactDOM.render(1, 2);
