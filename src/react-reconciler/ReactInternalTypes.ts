@@ -1,5 +1,6 @@
 import { RefObject } from '../shared/ReactTypes';
 import { Flags } from './ReactFiberFlags';
+import { LaneMap } from './ReactFiberLane';
 import { RootTag } from './ReactRootTags';
 import { TypeOfMode } from './ReactTypeOfMode';
 import { WorkTag } from './ReactWorkTags';
@@ -108,13 +109,97 @@ export type Fiber = {
   treeBaseDuration?: number;
 };
 
-export interface FiberRoot {
-  tag: RootTag;
-  // Any additional information from the host associated with this root.
-  containerInfo: Container;
+export type SuspenseHydrationCallbacks = {
+  // onHydrated?: (suspenseInstance: SuspenseInstance) => void,
+  // onDeleted?: (suspenseInstance: SuspenseInstance) => void,
+};
 
+type UpdaterTrackingOnlyFiberRootProperties = {
+  memoizedUpdaters: Set<Fiber>;
+  pendingUpdatersLaneMap: LaneMap<Set<Fiber>>;
+};
+
+type SuspenseCallbackOnlyFiberRootProperties = {
+  hydrationCallbacks: null | SuspenseHydrationCallbacks;
+};
+
+type TransitionTracingOnlyFiberRootProperties = {
+  // transitionCallbacks: null | TransitionTracingCallbacks,
+  // transitionLanes: Array<Array<Transition> | null>,
+};
+
+type BaseFiberRootProperties = {
+  // The type of root (legacy, batched, concurrent, etc.)
+  tag: RootTag;
+
+  // Any additional information from the host associated with this root.
+  containerInfo: any;
+  // Used only by persistent updates.
+  pendingChildren: any;
+  // The currently active root fiber. This is the mutable root of the tree.
   current: Fiber;
-}
+
+  // pingCache: WeakMap<Wakeable, Set<mixed>> | Map<Wakeable, Set<mixed>> | null;
+
+  // A finished work-in-progress HostRoot that's ready to be committed.
+  // finishedWork: Fiber | null;
+  // Timeout handle returned by setTimeout. Used to cancel a pending timeout, if
+  // it's superseded by a new one.
+  // timeoutHandle: TimeoutHandle | NoTimeout;
+  // Top context object, used by renderSubtreeIntoContainer
+  context: Object | null;
+  pendingContext: Object | null;
+
+  // Used by useMutableSource hook to avoid tearing during hydration.
+  // mutableSourceEagerHydrationData?: Array<MutableSource<any> | MutableSourceVersion> | null;
+
+  // Node returned by Scheduler.scheduleCallback. Represents the next rendering
+  // task that the root will work on.
+  // callbackNode: *;
+  // callbackPriority: Lane;
+  // eventTimes: LaneMap<number>;
+  // expirationTimes: LaneMap<number>;
+  // hiddenUpdates: LaneMap<Array<ConcurrentUpdate> | null>;
+
+  // pendingLanes: Lanes;
+  // suspendedLanes: Lanes;
+  // pingedLanes: Lanes;
+  // expiredLanes: Lanes;
+  // mutableReadLanes: Lanes;
+
+  // finishedLanes: Lanes;
+
+  // entangledLanes: Lanes;
+  // entanglements: LaneMap<Lanes>;
+
+  // pooledCache: Cache | null;
+  // pooledCacheLanes: Lanes;
+
+  // TODO: In Fizz, id generation is specific to each server config. Maybe we
+  // should do this in Fiber, too? Deferring this decision for now because
+  // there's no other place to store the prefix except for an internal field on
+  // the public createRoot object, which the fiber tree does not currently have
+  // a reference to.
+  // identifierPrefix: string;
+
+  // onRecoverableError: (
+  //   error: mixed,
+  //   errorInfo: { digest?: ?string; componentStack?: ?string }
+  // ) => void;
+};
+
+export type FiberRoot = BaseFiberRootProperties &
+  SuspenseCallbackOnlyFiberRootProperties &
+  UpdaterTrackingOnlyFiberRootProperties &
+  TransitionTracingOnlyFiberRootProperties;
+
+// export interface FiberRoot {
+//   tag: RootTag;
+//   // Any additional information from the host associated with this root.
+//   containerInfo: Container;
+
+//   current: Fiber;
+// }
 
 export type Container = Element & {
   _reactRootContainer?: FiberRoot;

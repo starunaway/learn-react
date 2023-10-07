@@ -1,6 +1,11 @@
+import { ReactNodeList } from '@/shared/ReactTypes';
 import { createFiberRoot } from './ReactFiberRoot';
 import { Container, FiberRoot } from './ReactInternalTypes';
 import { RootTag } from './ReactRootTags';
+import { Lane } from './ReactFiberLane';
+import { emptyContextObject, findCurrentUnmaskedContext } from './ReactFiberContext';
+import { createUpdate } from './ReactFiberClassUpdateQueue';
+import { requestEventTime, requestUpdateLane } from './ReactFiberWorkLoop';
 
 export function createContainer(
   containerInfo: Container,
@@ -28,14 +33,34 @@ export function createContainer(
   );
 }
 
+function getContextForSubtree(parentComponent?: any): Object {
+  if (!parentComponent) {
+    return emptyContextObject;
+  }
+
+  const fiber = parentComponent._reactInternals;
+  const parentContext = findCurrentUnmaskedContext(fiber);
+
+  // if (fiber.tag === ClassComponent) {
+  //   const Component = fiber.type;
+  //   if (isLegacyContextProvider(Component)) {
+  //     return processChildContext(fiber, Component, parentContext);
+  //   }
+  // }
+
+  return parentContext;
+}
+
 export function updateContainer(
-  element: ReactElement,
+  element: ReactNodeList,
   container: FiberRoot,
   parentComponent?: any,
   callback?: Function | null
 ): Lane {
   const current = container.current;
-  //   const lane = requestUpdateLane(current);
+  const eventTime = requestEventTime();
+
+  const lane = requestUpdateLane(current);
 
   const context = getContextForSubtree(parentComponent);
   if (container.context === null) {
@@ -44,15 +69,15 @@ export function updateContainer(
     container.pendingContext = context;
   }
 
-  const update = createUpdate(lane);
+  const update = createUpdate(eventTime, lane);
   // Caution: React DevTools currently depends on this property
   // being called "element".
   update.payload = { element };
 
-  callback = callback === undefined ? null : callback;
-  if (callback !== null) {
-    update.callback = callback;
-  }
+  // callback = callback === undefined ? null : callback;
+  // if (callback !== null) {
+  //   update.callback = callback;
+  // }
 
   const root = enqueueUpdate(current, update, lane);
   if (root !== null) {

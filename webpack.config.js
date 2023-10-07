@@ -13,6 +13,9 @@ module.exports = {
     // 默认需要添加 ".js" ，否则node_modules 里面的内容会找不到
     // extensions: ['.ts', '.tsx', '.js'],
     extensions: ['.ts', '.tsx', '.js', '.json'],
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
   },
   module: {
     rules: [
