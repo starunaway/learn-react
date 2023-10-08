@@ -1,6 +1,6 @@
 import { RefObject } from '../shared/ReactTypes';
 import { Flags } from './ReactFiberFlags';
-import { LaneMap } from './ReactFiberLane';
+import { LaneMap, Lanes } from './ReactFiberLane';
 import { RootTag } from './ReactRootTags';
 import { TypeOfMode } from './ReactTypeOfMode';
 import { WorkTag } from './ReactWorkTags';
@@ -157,13 +157,13 @@ type BaseFiberRootProperties = {
   // task that the root will work on.
   // callbackNode: *;
   // callbackPriority: Lane;
-  // eventTimes: LaneMap<number>;
+  eventTimes: LaneMap<number>;
   // expirationTimes: LaneMap<number>;
   // hiddenUpdates: LaneMap<Array<ConcurrentUpdate> | null>;
 
-  // pendingLanes: Lanes;
-  // suspendedLanes: Lanes;
-  // pingedLanes: Lanes;
+  pendingLanes: Lanes;
+  suspendedLanes: Lanes;
+  pingedLanes: Lanes;
   // expiredLanes: Lanes;
   // mutableReadLanes: Lanes;
 

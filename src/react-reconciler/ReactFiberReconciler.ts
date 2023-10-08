@@ -4,7 +4,7 @@ import { Container, FiberRoot } from './ReactInternalTypes';
 import { RootTag } from './ReactRootTags';
 import { Lane } from './ReactFiberLane';
 import { emptyContextObject, findCurrentUnmaskedContext } from './ReactFiberContext';
-import { createUpdate } from './ReactFiberClassUpdateQueue';
+import { createUpdate, enqueueUpdate } from './ReactFiberClassUpdateQueue';
 import { requestEventTime, requestUpdateLane } from './ReactFiberWorkLoop';
 
 export function createContainer(

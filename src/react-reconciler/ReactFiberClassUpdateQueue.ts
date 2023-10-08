@@ -1,3 +1,4 @@
+import { enqueueConcurrentClassUpdate } from './ReactFiberConcurrentUpdates';
 import { Lane, Lanes } from './ReactFiberLane';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
 
@@ -78,25 +79,26 @@ export function enqueueUpdate<State>(
 
   const sharedQueue: SharedQueue<State> = updateQueue.shared;
 
-  if (isUnsafeClassRenderPhaseUpdate(fiber)) {
-    // This is an unsafe render phase update. Add directly to the update
-    // queue so we can process it immediately during the current render.
-    const pending = sharedQueue.pending;
-    if (pending === null) {
-      // This is the first update. Create a circular list.
-      update.next = update;
-    } else {
-      update.next = pending.next;
-      pending.next = update;
-    }
-    sharedQueue.pending = update;
+  // 这个是 class component 的渲染流程，FC 模式下先不关心，低优
+  // if (isUnsafeClassRenderPhaseUpdate(fiber)) {
+  //   // This is an unsafe render phase update. Add directly to the update
+  //   // queue so we can process it immediately during the current render.
+  //   const pending = sharedQueue.pending;
+  //   if (pending === null) {
+  //     // This is the first update. Create a circular list.
+  //     update.next = update;
+  //   } else {
+  //     update.next = pending.next;
+  //     pending.next = update;
+  //   }
+  //   sharedQueue.pending = update;
 
-    // Update the childLanes even though we're most likely already rendering
-    // this fiber. This is for backwards compatibility in the case where you
-    // update a different component during render phase than the one that is
-    // currently renderings (a pattern that is accompanied by a warning).
-    return unsafe_markUpdateLaneFromFiberToRoot(fiber, lane);
-  } else {
-    return enqueueConcurrentClassUpdate(fiber, sharedQueue, update, lane);
-  }
+  //   // Update the childLanes even though we're most likely already rendering
+  //   // this fiber. This is for backwards compatibility in the case where you
+  //   // update a different component during render phase than the one that is
+  //   // currently renderings (a pattern that is accompanied by a warning).
+  //   return unsafe_markUpdateLaneFromFiberToRoot(fiber, lane);
+  // } else {
+  return enqueueConcurrentClassUpdate(fiber, sharedQueue, update, lane);
+  // }
 }
