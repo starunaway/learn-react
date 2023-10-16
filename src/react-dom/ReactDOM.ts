@@ -19,6 +19,7 @@ export function render(element: any, container: Container) {
     }
 
     root = createContainer(container, LegacyRoot);
+    console.log('root', root);
     container._reactRootContainer = root;
 
     // todo 事件监听能力

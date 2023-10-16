@@ -9,6 +9,11 @@ import type {
 } from './ReactFiberClassUpdateQueue';
 import { HostRoot } from './ReactWorkTags';
 
+export type ConcurrentUpdate = {
+  next: ConcurrentUpdate;
+  lane: Lane;
+};
+
 // An array of all update queues that received updates during the current
 // render. When this render exits, either because it finishes or because it is
 // interrupted, the interleaved updates will be transferred onto the main part

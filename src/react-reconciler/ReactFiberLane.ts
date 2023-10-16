@@ -47,3 +47,7 @@ export function markRootUpdated(root: FiberRoot, updateLane: Lane, eventTime: nu
   // recent event, and we assume time is monotonically increasing.
   eventTimes[index] = eventTime;
 }
+
+export function getHighestPriorityLane(lanes: Lanes): Lane {
+  return lanes & -lanes;
+}

@@ -1,6 +1,7 @@
 import { RefObject } from '../shared/ReactTypes';
+import { ConcurrentUpdate } from './ReactFiberConcurrentUpdates';
 import { Flags } from './ReactFiberFlags';
-import { LaneMap, Lanes } from './ReactFiberLane';
+import { Lane, LaneMap, Lanes } from './ReactFiberLane';
 import { RootTag } from './ReactRootTags';
 import { TypeOfMode } from './ReactTypeOfMode';
 import { WorkTag } from './ReactWorkTags';
@@ -142,7 +143,7 @@ type BaseFiberRootProperties = {
   // pingCache: WeakMap<Wakeable, Set<mixed>> | Map<Wakeable, Set<mixed>> | null;
 
   // A finished work-in-progress HostRoot that's ready to be committed.
-  // finishedWork: Fiber | null;
+  finishedWork: Fiber | null;
   // Timeout handle returned by setTimeout. Used to cancel a pending timeout, if
   // it's superseded by a new one.
   // timeoutHandle: TimeoutHandle | NoTimeout;
@@ -155,11 +156,11 @@ type BaseFiberRootProperties = {
 
   // Node returned by Scheduler.scheduleCallback. Represents the next rendering
   // task that the root will work on.
-  // callbackNode: *;
-  // callbackPriority: Lane;
+  callbackNode: any;
+  callbackPriority: Lane;
   eventTimes: LaneMap<number>;
-  // expirationTimes: LaneMap<number>;
-  // hiddenUpdates: LaneMap<Array<ConcurrentUpdate> | null>;
+  expirationTimes: LaneMap<number>;
+  hiddenUpdates: LaneMap<Array<ConcurrentUpdate> | null>;
 
   pendingLanes: Lanes;
   suspendedLanes: Lanes;
@@ -167,7 +168,7 @@ type BaseFiberRootProperties = {
   // expiredLanes: Lanes;
   // mutableReadLanes: Lanes;
 
-  // finishedLanes: Lanes;
+  finishedLanes: Lanes;
 
   // entangledLanes: Lanes;
   // entanglements: LaneMap<Lanes>;
