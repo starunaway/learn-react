@@ -5,7 +5,7 @@ import { RootTag } from './ReactRootTags';
 import { Lane } from './ReactFiberLane';
 import { emptyContextObject, findCurrentUnmaskedContext } from './ReactFiberContext';
 import { createUpdate, enqueueUpdate } from './ReactFiberClassUpdateQueue';
-import { requestEventTime, requestUpdateLane } from './ReactFiberWorkLoop';
+import { requestEventTime, requestUpdateLane, scheduleUpdateOnFiber } from './ReactFiberWorkLoop';
 
 export function createContainer(
   containerInfo: Container,
@@ -81,7 +81,7 @@ export function updateContainer(
 
   const root = enqueueUpdate(current, update, lane);
   if (root !== null) {
-    scheduleUpdateOnFiber(root, current, lane);
+    scheduleUpdateOnFiber(root, current, lane, eventTime);
     entangleTransitions(root, current, lane);
   }
 

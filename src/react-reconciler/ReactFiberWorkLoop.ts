@@ -14,6 +14,22 @@ import { ConcurrentMode, NoMode } from './ReactTypeOfMode';
 import { LegacyRoot } from './ReactRootTags';
 import { flushSyncCallbacks, scheduleLegacySyncCallback } from './ReactFiberSyncTaskQueue';
 import { scheduleMicrotask, supportsMicrotasks } from './ReactFiberHostConfig';
+import { Transition } from './ReactFiberTracingMarkerComponent';
+import {
+  DefaultEventPriority,
+  getCurrentUpdatePriority,
+  lanesToEventPriority,
+  lowerEventPriority,
+  setCurrentUpdatePriority,
+} from './ReactEventPriorities';
+import ReactSharedInternals from '@/shared/ReactSharedInternals';
+
+const {
+  // ReactCurrentDispatcher,
+  // ReactCurrentOwner,
+  ReactCurrentBatchConfig,
+  // ReactCurrentActQueue,
+} = ReactSharedInternals;
 
 type ExecutionContext = number;
 
@@ -42,6 +58,17 @@ let workInProgress: Fiber | null = null;
 let workInProgressRootRenderLanes: Lanes = NoLanes;
 
 let workInProgressRootExitStatus: RootExitStatus = RootInProgress;
+
+// Only used when enableProfilerNestedUpdateScheduledHook is true;
+// to track which root is currently committing layout effects.
+let rootCommittingMutationOrLayoutEffects: FiberRoot | null = null;
+
+let rootDoesHavePassiveEffects: boolean = false;
+let rootWithPendingPassiveEffects: FiberRoot | null = null;
+let pendingPassiveEffectsLanes: Lanes = NoLanes;
+let pendingPassiveProfilerEffects: Array<Fiber> = [];
+let pendingPassiveEffectsRemainingLanes: Lanes = NoLanes;
+let pendingPassiveTransitions: Array<Transition> | null = null;
 
 // Use these to prevent an infinite loop of nested updates
 const NESTED_UPDATE_LIMIT = 50;
@@ -196,6 +223,8 @@ export function scheduleUpdateOnFiber(
     //     addTransitionToLanesMap(root, transition, lane);
     //   }
     // }
+
+    // 这里省略了一堆新特性方法
 
     if (root === workInProgressRoot) {
       // Received an update to a tree that's in the middle of rendering. Mark
@@ -445,4 +474,150 @@ function performSyncWorkOnRoot(root: FiberRoot) {
 function scheduleCallback(priorityLevel, callback) {
   // In production, always call Scheduler. This function will be stripped out.
   return Scheduler_scheduleCallback(priorityLevel, callback);
+}
+
+export function flushPassiveEffects(): boolean {
+  // Returns whether passive effects were flushed.
+  // TODO: Combine this check with the one in flushPassiveEFfectsImpl. We should
+  // probably just combine the two functions. I believe they were only separate
+  // in the first place because we used to wrap it with
+  // `Scheduler.runWithPriority`, which accepts a function. But now we track the
+  // priority within React itself, so we can mutate the variable directly.
+  if (rootWithPendingPassiveEffects !== null) {
+    // Cache the root since rootWithPendingPassiveEffects is cleared in
+    // flushPassiveEffectsImpl
+    const root = rootWithPendingPassiveEffects;
+    // Cache and clear the remaining lanes flag; it must be reset since this
+    // method can be called from various places, not always from commitRoot
+    // where the remaining lanes are known
+    const remainingLanes = pendingPassiveEffectsRemainingLanes;
+    pendingPassiveEffectsRemainingLanes = NoLanes;
+
+    const renderPriority = lanesToEventPriority(pendingPassiveEffectsLanes);
+    const priority = lowerEventPriority(DefaultEventPriority, renderPriority);
+    const prevTransition = ReactCurrentBatchConfig.transition;
+    const previousPriority = getCurrentUpdatePriority();
+
+    try {
+      ReactCurrentBatchConfig.transition = null;
+      setCurrentUpdatePriority(priority);
+      return flushPassiveEffectsImpl();
+    } finally {
+      setCurrentUpdatePriority(previousPriority);
+      ReactCurrentBatchConfig.transition = prevTransition;
+
+      // Once passive effects have run for the tree - giving components a
+      // chance to retain cache instances they use - release the pooled
+      // cache at the root (if there is one)
+      releaseRootPooledCache(root, remainingLanes);
+    }
+  }
+  return false;
+}
+
+function flushPassiveEffectsImpl() {
+  if (rootWithPendingPassiveEffects === null) {
+    return false;
+  }
+
+  // Cache and clear the transitions flag
+  const transitions = pendingPassiveTransitions;
+  pendingPassiveTransitions = null;
+
+  const root = rootWithPendingPassiveEffects;
+  const lanes = pendingPassiveEffectsLanes;
+  rootWithPendingPassiveEffects = null;
+  // TODO: This is sometimes out of sync with rootWithPendingPassiveEffects.
+  // Figure out why and fix it. It's not causing any known issues (probably
+  // because it's only used for profiling), but it's a refactor hazard.
+  pendingPassiveEffectsLanes = NoLanes;
+
+  if ((executionContext & (RenderContext | CommitContext)) !== NoContext) {
+    throw new Error('Cannot flush passive effects while already rendering.');
+  }
+
+  // if (__DEV__) {
+  //   isFlushingPassiveEffects = true;
+  //   didScheduleUpdateDuringPassiveEffects = false;
+
+  //   if (enableDebugTracing) {
+  //     logPassiveEffectsStarted(lanes);
+  //   }
+  // }
+
+  // if (enableSchedulingProfiler) {
+  //   markPassiveEffectsStarted(lanes);
+  // }
+
+  const prevExecutionContext = executionContext;
+  executionContext |= CommitContext;
+
+  commitPassiveUnmountEffects(root.current);
+  commitPassiveMountEffects(root, root.current, lanes, transitions);
+
+  // TODO: Move to commitPassiveMountEffects
+  // if (enableProfilerTimer && enableProfilerCommitHooks) {
+  //   const profilerEffects = pendingPassiveProfilerEffects;
+  //   pendingPassiveProfilerEffects = [];
+  //   for (let i = 0; i < profilerEffects.length; i++) {
+  //     const fiber = ((profilerEffects[i]: any): Fiber);
+  //     commitPassiveEffectDurations(root, fiber);
+  //   }
+  // }
+
+  // if (__DEV__) {
+  //   if (enableDebugTracing) {
+  //     logPassiveEffectsStopped();
+  //   }
+  // }
+
+  // if (enableSchedulingProfiler) {
+  //   markPassiveEffectsStopped();
+  // }
+
+  // if (__DEV__ && enableStrictEffects) {
+  //   commitDoubleInvokeEffectsInDEV(root.current, true);
+  // }
+
+  executionContext = prevExecutionContext;
+
+  flushSyncCallbacks();
+
+  // if (enableTransitionTracing) {
+  //   const prevPendingTransitionCallbacks = currentPendingTransitionCallbacks;
+  //   const prevRootTransitionCallbacks = root.transitionCallbacks;
+  //   if (
+  //     prevPendingTransitionCallbacks !== null &&
+  //     prevRootTransitionCallbacks !== null
+  //   ) {
+  //     // TODO(luna) Refactor this code into the Host Config
+  //     // TODO(luna) The end time here is not necessarily accurate
+  //     // because passive effects could be called before paint
+  //     // (synchronously) or after paint (normally). We need
+  //     // to come up with a way to get the correct end time for both cases.
+  //     // One solution is in the host config, if the passive effects
+  //     // have not yet been run, make a call to flush the passive effects
+  //     // right after paint.
+  //     const endTime = now();
+  //     currentPendingTransitionCallbacks = null;
+
+  //     scheduleCallback(IdleSchedulerPriority, () =>
+  //       processTransitionCallbacks(
+  //         prevPendingTransitionCallbacks,
+  //         endTime,
+  //         prevRootTransitionCallbacks,
+  //       ),
+  //     );
+  //   }
+  // }
+
+  // TODO: Move to commitPassiveMountEffects
+  onPostCommitRootDevTools(root);
+  // if (enableProfilerTimer && enableProfilerCommitHooks) {
+  //   const stateNode = root.current.stateNode;
+  //   stateNode.effectDuration = 0;
+  //   stateNode.passiveEffectDuration = 0;
+  // }
+
+  return true;
 }

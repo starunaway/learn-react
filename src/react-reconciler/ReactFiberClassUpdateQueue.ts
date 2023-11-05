@@ -1,5 +1,5 @@
 import { enqueueConcurrentClassUpdate } from './ReactFiberConcurrentUpdates';
-import { Lane, Lanes } from './ReactFiberLane';
+import { Lane, Lanes, NoLanes } from './ReactFiberLane';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
 
 export type Update<State> = {
@@ -33,23 +33,20 @@ export const ReplaceState = 1;
 export const ForceUpdate = 2;
 export const CaptureUpdate = 3;
 
-export function initializeUpdateQueue(fiber: Fiber): void {
-  // const queue: UpdateQueue<State> = {
-  //   baseState: fiber.memoizedState,
-  //   firstBaseUpdate: null,
-  //   lastBaseUpdate: null,
-  //   shared: {
-  // 	pending: null,
-  // 	lanes: NoLanes,
-  // 	hiddenCallbacks: null,
-  //   },
-  //   callbacks: null,
-  // };
-  fiber.updateQueue = {
+// todo 现在都使用的.old 文件
+export function initializeUpdateQueue<State>(fiber: Fiber): void {
+  const queue: UpdateQueue<State> = {
+    baseState: fiber.memoizedState,
+    firstBaseUpdate: null,
+    lastBaseUpdate: null,
     shared: {
       pending: null,
+      interleaved: null,
+      lanes: NoLanes,
     },
+    effects: null,
   };
+  fiber.updateQueue = queue;
 }
 
 export function createUpdate(eventTime: number, lane: Lane): Update<any> {

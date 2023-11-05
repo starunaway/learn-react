@@ -11,10 +11,21 @@ export const NoLane: Lane = /*                          */ 0b0000000000000000000
 
 export const SyncLane: Lane = /*                        */ 0b0000000000000000000000000000001;
 
+export const InputContinuousHydrationLane: Lane = /*    */ 0b0000000000000000000000000000010;
+export const InputContinuousLane: Lane = /*             */ 0b0000000000000000000000000000100;
+
+export const DefaultHydrationLane: Lane = /*            */ 0b0000000000000000000000000001000;
+export const DefaultLane: Lane = /*                     */ 0b0000000000000000000000000010000;
 export const NoTimestamp = -1;
 
+const NonIdleLanes: Lanes = /*                          */ 0b0001111111111111111111111111111;
+
+export const IdleHydrationLane: Lane = /*               */ 0b0010000000000000000000000000000;
 export const IdleLane: Lane = /*                        */ 0b0100000000000000000000000000000;
 
+export function getHighestPriorityLane(lanes: Lanes): Lane {
+  return lanes & -lanes;
+}
 // todo lane 模型后续再看
 function laneToIndex(lane: Lane) {
   return 31 - Math.clz32(lane);
@@ -48,6 +59,6 @@ export function markRootUpdated(root: FiberRoot, updateLane: Lane, eventTime: nu
   eventTimes[index] = eventTime;
 }
 
-export function getHighestPriorityLane(lanes: Lanes): Lane {
-  return lanes & -lanes;
+export function includesNonIdleWork(lanes: Lanes) {
+  return (lanes & NonIdleLanes) !== NoLanes;
 }
