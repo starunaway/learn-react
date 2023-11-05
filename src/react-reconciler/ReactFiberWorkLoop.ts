@@ -16,13 +16,19 @@ import { flushSyncCallbacks, scheduleLegacySyncCallback } from './ReactFiberSync
 import { scheduleMicrotask, supportsMicrotasks } from './ReactFiberHostConfig';
 import { Transition } from './ReactFiberTracingMarkerComponent';
 import {
+  ContinuousEventPriority,
   DefaultEventPriority,
+  DiscreteEventPriority,
   getCurrentUpdatePriority,
+  IdleEventPriority,
   lanesToEventPriority,
   lowerEventPriority,
   setCurrentUpdatePriority,
 } from './ReactEventPriorities';
 import ReactSharedInternals from '@/shared/ReactSharedInternals';
+import { ClassComponent, HostRoot } from './ReactWorkTags';
+import { enqueueUpdate } from './ReactFiberClassUpdateQueue';
+import { commitPassiveMountEffects } from './ReactFiberCommitWork';
 
 const {
   // ReactCurrentDispatcher,
@@ -612,7 +618,8 @@ function flushPassiveEffectsImpl() {
   // }
 
   // TODO: Move to commitPassiveMountEffects
-  onPostCommitRootDevTools(root);
+  //  这个是 devTool ，先不管
+  // onPostCommitRootDevTools(root);
   // if (enableProfilerTimer && enableProfilerCommitHooks) {
   //   const stateNode = root.current.stateNode;
   //   stateNode.effectDuration = 0;
@@ -620,4 +627,84 @@ function flushPassiveEffectsImpl() {
   // }
 
   return true;
+}
+
+function captureCommitPhaseErrorOnRoot(rootFiber: Fiber, sourceFiber: Fiber, error: any) {
+  const errorInfo = createCapturedValueAtFiber(error, sourceFiber);
+  const update = createRootErrorUpdate(rootFiber, errorInfo, SyncLane);
+  const root = enqueueUpdate(rootFiber, update, SyncLane);
+  const eventTime = requestEventTime();
+  if (root !== null) {
+    markRootUpdated(root, SyncLane, eventTime);
+    ensureRootIsScheduled(root, eventTime);
+  }
+}
+
+export function captureCommitPhaseError(
+  sourceFiber: Fiber,
+  nearestMountedAncestor: Fiber | null,
+  error: any
+) {
+  // if (__DEV__) {
+  //   reportUncaughtErrorInDEV(error);
+  //   setIsRunningInsertionEffect(false);
+  // }
+  if (sourceFiber.tag === HostRoot) {
+    // Error was thrown at the root. There is no parent, so the root
+    // itself should capture it.
+    captureCommitPhaseErrorOnRoot(sourceFiber, sourceFiber, error);
+    return;
+  }
+
+  let fiber = null;
+  // todo 这里默认定义的是 true，先直接写死
+  // if (skipUnmountedBoundaries) {
+  fiber = nearestMountedAncestor;
+  // } else {
+  //   fiber = sourceFiber.return;
+  // }
+
+  while (fiber !== null) {
+    if (fiber.tag === HostRoot) {
+      captureCommitPhaseErrorOnRoot(fiber, sourceFiber, error);
+      return;
+    }
+    // ClassComponent 类型，Function 类型应该走不到这里来
+    else if (fiber.tag === ClassComponent) {
+      const ctor = fiber.type;
+      const instance = fiber.stateNode;
+      // if (
+      //   typeof ctor.getDerivedStateFromError === 'function' ||
+      //   (typeof instance.componentDidCatch === 'function' &&
+      //     !isAlreadyFailedLegacyErrorBoundary(instance))
+      // ) {
+      //   const errorInfo = createCapturedValueAtFiber(error, sourceFiber);
+      //   const update = createClassErrorUpdate(fiber, errorInfo, SyncLane);
+      //   const root = enqueueUpdate(fiber, update, SyncLane);
+      //   const eventTime = requestEventTime();
+      //   if (root !== null) {
+      //     markRootUpdated(root, SyncLane, eventTime);
+      //     ensureRootIsScheduled(root, eventTime);
+      //   }
+      //   return;
+      // }
+    }
+    fiber = fiber.return;
+  }
+
+  // if (__DEV__) {
+  //   // TODO: Until we re-land skipUnmountedBoundaries (see #20147), this warning
+  //   // will fire for errors that are thrown by destroy functions inside deleted
+  //   // trees. What it should instead do is propagate the error to the parent of
+  //   // the deleted tree. In the meantime, do not add this warning to the
+  //   // allowlist; this is only for our internal use.
+  //   console.error(
+  //     'Internal React error: Attempted to capture a commit phase error ' +
+  //       'inside a detached tree. This indicates a bug in React. Likely ' +
+  //       'causes include deleting the same fiber more than once, committing an ' +
+  //       'already-finished tree, or an inconsistent return pointer.\n\n' +
+  //       'Error message:\n\n%s',
+  //     error,
+  //   );
+  // }
 }

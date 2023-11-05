@@ -25,3 +25,5 @@ export const Passive = /*                      */ 0b0000000000000000100000000000
 
 export const Visibility = /*                   */ 0b0000000000000010000000000000;
 export const StoreConsistency = /*             */ 0b0000000000000100000000000000;
+
+export const PassiveMask = Passive | ChildDeletion;
