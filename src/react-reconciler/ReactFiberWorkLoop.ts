@@ -52,6 +52,7 @@ import {
   commitLayoutEffects,
   commitMutationEffects,
   commitPassiveMountEffects,
+  commitPassiveUnmountEffects,
 } from './ReactFiberCommitWork';
 import { isRootDehydrated } from './ReactFiberShellHydration';
 
@@ -61,6 +62,7 @@ import {
   UserBlockingPriority as UserBlockingSchedulerPriority,
   NormalPriority as NormalSchedulerPriority,
   IdlePriority as IdleSchedulerPriority,
+  shouldYield,
   requestPaint,
 } from './Scheduler';
 import { PriorityLevel } from '@/scheduler/SchedulerPriorities';
@@ -68,6 +70,8 @@ import { CapturedValue, createCapturedValueAtFiber } from './ReactCapturedValue'
 import {
   BeforeMutationMask,
   ForceClientRender,
+  HostEffectMask,
+  Incomplete,
   LayoutMask,
   MutationMask,
   NoFlags,
@@ -76,11 +80,12 @@ import {
 } from './ReactFiberFlags';
 import { createRootErrorUpdate } from './ReactFiberThrow';
 import { ContextOnlyDispatcher, FunctionComponentUpdateQueue } from './ReactFiberHooks';
-import { unwindInterruptedWork } from './ReactFiberUnwindWork';
+import { unwindInterruptedWork, unwindWork } from './ReactFiberUnwindWork';
 import { createWorkInProgress } from './ReactFiber';
 import { finishQueueingConcurrentUpdates } from './ReactFiberConcurrentUpdates';
 import { resetContextDependencies } from './ReactFiberNewContext';
 import { beginWork } from './ReactFiberBeginWork';
+import { completeWork } from './ReactFiberCompleteWork';
 
 const {
   ReactCurrentDispatcher,
@@ -1551,6 +1556,13 @@ function workLoopSync() {
   }
 }
 
+function workLoopConcurrent() {
+  // Perform work until Scheduler asks us to yield
+  while (workInProgress !== null && !shouldYield()) {
+    performUnitOfWork(workInProgress);
+  }
+}
+
 function performUnitOfWork(unitOfWork: Fiber): void {
   // The current, flushed, state of this fiber is the alternate. Ideally
   // nothing should rely on this, but relying on it here means that we don't
@@ -1578,6 +1590,106 @@ function performUnitOfWork(unitOfWork: Fiber): void {
   }
 
   ReactCurrentOwner.current = null;
+}
+
+function completeUnitOfWork(unitOfWork: Fiber): void {
+  // Attempt to complete the current unit of work, then move to the next
+  // sibling. If there are no more siblings, return to the parent fiber.
+  let completedWork = unitOfWork;
+  do {
+    // The current, flushed, state of this fiber is the alternate. Ideally
+    // nothing should rely on this, but relying on it here means that we don't
+    // need an additional field on the work in progress.
+    const current = completedWork.alternate;
+    const returnFiber = completedWork.return;
+
+    // Check if the work completed or if something threw.
+    if ((completedWork.flags & Incomplete) === NoFlags) {
+      // setCurrentDebugFiberInDEV(completedWork);
+      let next;
+      if (
+        // !enableProfilerTimer ||
+        (completedWork.mode & ProfileMode) ===
+        NoMode
+      ) {
+        next = completeWork(current, completedWork, subtreeRenderLanes);
+      }
+      // 特性不开启，走不到这里来
+      //  else {
+      //   startProfilerTimer(completedWork);
+      //   next = completeWork(current, completedWork, subtreeRenderLanes);
+      //   // Update render duration assuming we didn't error.
+      //   stopProfilerTimerIfRunningAndRecordDelta(completedWork, false);
+      // }
+      // resetCurrentDebugFiberInDEV();
+
+      if (next) {
+        // Completing this fiber spawned new work. Work on that next.
+        workInProgress = next;
+        return;
+      }
+    } else {
+      // This fiber did not complete because something threw. Pop values off
+      // the stack without entering the complete phase. If this is a boundary,
+      // capture values if possible.
+      const next = unwindWork(current, completedWork, subtreeRenderLanes);
+
+      // Because this fiber did not complete, don't reset its lanes.
+
+      if (next !== null) {
+        // If completing this work spawned new work, do that next. We'll come
+        // back here again.
+        // Since we're restarting, remove anything that is not a host effect
+        // from the effect tag.
+        next.flags &= HostEffectMask;
+        workInProgress = next;
+        return;
+      }
+
+      // 特性不开启
+      // if (enableProfilerTimer && (completedWork.mode & ProfileMode) !== NoMode) {
+      //   // Record the render duration for the fiber that errored.
+      //   stopProfilerTimerIfRunningAndRecordDelta(completedWork, false);
+
+      //   // Include the time spent working on failed children before continuing.
+      //   let actualDuration = completedWork.actualDuration;
+      //   let child = completedWork.child;
+      //   while (child !== null) {
+      //     actualDuration += child.actualDuration;
+      //     child = child.sibling;
+      //   }
+      //   completedWork.actualDuration = actualDuration;
+      // }
+
+      if (returnFiber !== null) {
+        // Mark the parent fiber as incomplete and clear its subtree flags.
+        returnFiber.flags |= Incomplete;
+        returnFiber.subtreeFlags = NoFlags;
+        returnFiber.deletions = null;
+      } else {
+        // We've unwound all the way to the root.
+        workInProgressRootExitStatus = RootDidNotComplete;
+        workInProgress = null;
+        return;
+      }
+    }
+
+    const siblingFiber = completedWork.sibling;
+    if (siblingFiber !== null) {
+      // If there is more work to do in this returnFiber, do that next.
+      workInProgress = siblingFiber;
+      return;
+    }
+    // Otherwise, return to the parent
+    completedWork = returnFiber!;
+    // Update the next thing we're working on in case something throws.
+    workInProgress = completedWork;
+  } while (completedWork !== null);
+
+  // We've reached the root.
+  if (workInProgressRootExitStatus === RootInProgress) {
+    workInProgressRootExitStatus = RootCompleted;
+  }
 }
 
 function flushPassiveEffectsImpl() {
@@ -1696,21 +1808,22 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
   // If the root or lanes have changed, throw out the existing stack
   // and prepare a fresh one. Otherwise we'll continue where we left off.
   if (workInProgressRoot !== root || workInProgressRootRenderLanes !== lanes) {
-    if (enableUpdaterTracking) {
-      if (isDevToolsPresent) {
-        const memoizedUpdaters = root.memoizedUpdaters;
-        if (memoizedUpdaters.size > 0) {
-          restorePendingUpdaters(root, workInProgressRootRenderLanes);
-          memoizedUpdaters.clear();
-        }
+    // 特性，不看
+    // if (enableUpdaterTracking) {
+    //   if (isDevToolsPresent) {
+    //     const memoizedUpdaters = root.memoizedUpdaters;
+    //     if (memoizedUpdaters.size > 0) {
+    //       restorePendingUpdaters(root, workInProgressRootRenderLanes);
+    //       memoizedUpdaters.clear();
+    //     }
 
-        // At this point, move Fibers that scheduled the upcoming work from the Map to the Set.
-        // If we bailout on this work, we'll move them back (like above).
-        // It's important to move them now in case the work spawns more work at the same priority with different updaters.
-        // That way we can keep the current update and future updates separate.
-        movePendingFibersToMemoized(root, lanes);
-      }
-    }
+    //     // At this point, move Fibers that scheduled the upcoming work from the Map to the Set.
+    //     // If we bailout on this work, we'll move them back (like above).
+    //     // It's important to move them now in case the work spawns more work at the same priority with different updaters.
+    //     // That way we can keep the current update and future updates separate.
+    //     movePendingFibersToMemoized(root, lanes);
+    //   }
+    // }
 
     workInProgressTransitions = getTransitionsForLanes(root, lanes);
     resetRenderTimer();
@@ -1733,7 +1846,8 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
       workLoopConcurrent();
       break;
     } catch (thrownValue) {
-      handleError(root, thrownValue);
+      console.error(thrownValue);
+      // handleError(root, thrownValue);
     }
   } while (true);
   resetContextDependencies();

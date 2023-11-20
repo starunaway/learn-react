@@ -480,4 +480,5 @@ export {
   NormalPriority,
   // PriorityLevel,
   UserBlockingPriority,
+  shouldYieldToHost as shouldYield,
 };

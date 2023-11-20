@@ -1,7 +1,20 @@
+import { StackCursor, createCursor } from './ReactFiberStack';
 import { Fiber } from './ReactInternalTypes';
 
 export const emptyContextObject = {};
 
+const didPerformWorkStackCursor: StackCursor<boolean> = createCursor(false);
+
+// 不启动
+const disableLegacyContext = false;
+
+function hasContextChanged(): boolean {
+  if (disableLegacyContext) {
+    return false;
+  } else {
+    return didPerformWorkStackCursor.current;
+  }
+}
 export function findCurrentUnmaskedContext(fiber: Fiber): Object {
   // if (disableLegacyContext) {
   return emptyContextObject;
@@ -37,3 +50,5 @@ export function findCurrentUnmaskedContext(fiber: Fiber): Object {
   //   );
   // }
 }
+
+export { hasContextChanged as hasLegacyContextChanged };
