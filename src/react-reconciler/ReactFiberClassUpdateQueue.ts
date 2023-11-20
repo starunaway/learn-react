@@ -1,5 +1,13 @@
 import { enqueueConcurrentClassUpdate } from './ReactFiberConcurrentUpdates';
-import { Lane, Lanes, NoLanes } from './ReactFiberLane';
+import {
+  Lane,
+  Lanes,
+  NoLanes,
+  intersectLanes,
+  isTransitionLane,
+  markRootEntangled,
+  mergeLanes,
+} from './ReactFiberLane';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
 
 export type Update<State> = {
@@ -98,4 +106,32 @@ export function enqueueUpdate<State>(
   // } else {
   return enqueueConcurrentClassUpdate(fiber, sharedQueue, update, lane);
   // }
+}
+
+export function entangleTransitions(root: FiberRoot, fiber: Fiber, lane: Lane) {
+  const updateQueue = fiber.updateQueue;
+  if (updateQueue === null) {
+    // Only occurs if the fiber has been unmounted.
+    return;
+  }
+
+  const sharedQueue: SharedQueue<any> = updateQueue.shared;
+  if (isTransitionLane(lane)) {
+    let queueLanes = sharedQueue.lanes;
+
+    // If any entangled lanes are no longer pending on the root, then they must
+    // have finished. We can remove them from the shared queue, which represents
+    // a superset of the actually pending lanes. In some cases we may entangle
+    // more than we need to, but that's OK. In fact it's worse if we *don't*
+    // entangle when we should.
+    queueLanes = intersectLanes(queueLanes, root.pendingLanes);
+
+    // Entangle the new transition lane with the other transition lanes.
+    const newQueueLanes = mergeLanes(queueLanes, lane);
+    sharedQueue.lanes = newQueueLanes;
+    // Even if queue.lanes already include lane, we don't know for certain if
+    // the lane finished since the last time we entangled it. So we need to
+    // entangle it again, just to be sure.
+    markRootEntangled(root, newQueueLanes);
+  }
 }

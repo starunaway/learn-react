@@ -1,4 +1,14 @@
+import { Container } from './ReactInternalTypes';
+
 export const supportsMicrotasks = true;
+
+type SelectionInformation = {
+  focusedElem: null | HTMLElement;
+  selectionRange: any;
+};
+
+let eventsEnabled: boolean | null = null;
+let selectionInformation: null | SelectionInformation = null;
 
 const localPromise = typeof Promise === 'function' ? Promise : undefined;
 
@@ -17,3 +27,18 @@ function handleErrorInNextTick(error: any) {
     throw error;
   });
 }
+
+export const noTimeout = -1;
+
+export const cancelTimeout = clearTimeout;
+
+export function resetAfterCommit(containerInfo: Container): void {
+  // 重置选中
+  // restoreSelection(selectionInformation);
+  //  官方也不确定是否有用
+  // ReactBrowserEventEmitterSetEnabled(eventsEnabled);
+  eventsEnabled = null;
+  selectionInformation = null;
+}
+
+export const isPrimaryRenderer = true;

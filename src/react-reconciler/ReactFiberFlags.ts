@@ -1,5 +1,14 @@
 export type Flags = number;
 
+// Static tags describe aspects of a fiber that are not specific to a render,
+// e.g. a fiber uses a passive effect (even if there are no updates on this particular render).
+// This enables us to defer more work in the unmount case,
+// since we can defer traversing the tree during layout to look for Passive effects,
+// and instead rely on the static flag as a signal that there may be cleanup work.
+export const RefStatic = /*                    */ 0b00001000000000000000000000;
+export const LayoutStatic = /*                 */ 0b00010000000000000000000000;
+export const PassiveStatic = /*                */ 0b00100000000000000000000000;
+
 // todo 暂时可以先不看?
 // Don't change these values. They're used by React Dev Tools.
 export const NoFlags = /*                      */ 0b0000000000000000000000000000;
@@ -26,4 +35,19 @@ export const Passive = /*                      */ 0b0000000000000000100000000000
 export const Visibility = /*                   */ 0b0000000000000010000000000000;
 export const StoreConsistency = /*             */ 0b0000000000000100000000000000;
 
+export const BeforeMutationMask =
+  // TODO: Remove Update flag from before mutation phase by re-landing Visibility
+  // flag logic (see #20043)
+  Update | Snapshot | 0;
+
+export const MutationMask =
+  Placement | Update | ChildDeletion | ContentReset | Ref | Hydrating | Visibility;
+export const LayoutMask = Update | Callback | Ref | Visibility;
+
+// TODO: Split into PassiveMountMask and PassiveUnmountMask
 export const PassiveMask = Passive | ChildDeletion;
+
+// Union of tags that don't get reset on clones.
+// This allows certain concepts to persist without recalculating them,
+// e.g. whether a subtree contains passive effects or portals.
+export const StaticMask = LayoutStatic | PassiveStatic | RefStatic;

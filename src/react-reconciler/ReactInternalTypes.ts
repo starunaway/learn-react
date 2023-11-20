@@ -1,4 +1,4 @@
-import { RefObject } from '@/shared/ReactTypes';
+import { ReactContext, RefObject } from '@/shared/ReactTypes';
 import { ConcurrentUpdate } from './ReactFiberConcurrentUpdates';
 import { Flags } from './ReactFiberFlags';
 import { Lane, LaneMap, Lanes } from './ReactFiberLane';
@@ -6,6 +6,21 @@ import { RootTag } from './ReactRootTags';
 import { TypeOfMode } from './ReactTypeOfMode';
 import { WorkTag } from './ReactWorkTags';
 
+export type TimeoutHandle = number | null;
+export type NoTimeout = -1;
+
+export type ContextDependency<T> = {
+  context: ReactContext<T>;
+  next: ContextDependency<any> | null;
+  memoizedValue: T;
+  [key: string]: any;
+};
+
+export type Dependencies = {
+  lanes: Lanes;
+  firstContext: ContextDependency<any> | null;
+  [key: string]: any;
+};
 export type Fiber = {
   tag: WorkTag;
 
@@ -56,7 +71,7 @@ export type Fiber = {
   memoizedState: any;
 
   // Dependencies (contexts, events) for this fiber, if it has any
-  //   dependencies: Dependencies | null;
+  dependencies: Dependencies | null;
 
   // Bitfield that describes properties about the fiber and its subtree. E.g.
   // the ConcurrentMode flag indicates whether the subtree should be async-by-
@@ -80,8 +95,8 @@ export type Fiber = {
   firstEffect?: Fiber | null;
   lastEffect?: Fiber | null;
 
-  //   lanes: Lanes;
-  //   childLanes: Lanes;
+  lanes: Lanes;
+  childLanes: Lanes;
 
   // This is a pooled version of a Fiber. Every fiber that gets updated will
   // eventually have a pair. There are cases when we can clean up pairs to save
@@ -146,7 +161,7 @@ type BaseFiberRootProperties = {
   finishedWork: Fiber | null;
   // Timeout handle returned by setTimeout. Used to cancel a pending timeout, if
   // it's superseded by a new one.
-  // timeoutHandle: TimeoutHandle | NoTimeout;
+  timeoutHandle: TimeoutHandle | NoTimeout;
   // Top context object, used by renderSubtreeIntoContainer
   context: Object | null;
   pendingContext: Object | null;
@@ -165,13 +180,13 @@ type BaseFiberRootProperties = {
   pendingLanes: Lanes;
   suspendedLanes: Lanes;
   pingedLanes: Lanes;
-  // expiredLanes: Lanes;
-  // mutableReadLanes: Lanes;
+  expiredLanes: Lanes;
+  mutableReadLanes: Lanes;
 
   finishedLanes: Lanes;
 
-  // entangledLanes: Lanes;
-  // entanglements: LaneMap<Lanes>;
+  entangledLanes: Lanes;
+  entanglements: LaneMap<Lanes>;
 
   // pooledCache: Cache | null;
   // pooledCacheLanes: Lanes;
@@ -183,10 +198,7 @@ type BaseFiberRootProperties = {
   // a reference to.
   // identifierPrefix: string;
 
-  // onRecoverableError: (
-  //   error: mixed,
-  //   errorInfo: { digest?: ?string; componentStack?: ?string }
-  // ) => void;
+  onRecoverableError: (error: any, errorInfo: { digest?: string; componentStack?: string }) => void;
 };
 
 export type FiberRoot = BaseFiberRootProperties &

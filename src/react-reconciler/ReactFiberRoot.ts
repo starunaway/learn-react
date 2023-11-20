@@ -1,10 +1,19 @@
 import { FiberNode } from './ReactFiber';
 import { initializeUpdateQueue } from './ReactFiberClassUpdateQueue';
 import { NoLane, NoLanes } from './ReactFiberLane';
+import { PendingSuspenseBoundaries, Transition } from './ReactFiberTracingMarkerComponent';
 import { Container, FiberRoot } from './ReactInternalTypes';
 import { type RootTag } from './ReactRootTags';
 import { NoMode } from './ReactTypeOfMode';
 import { HostRoot } from './ReactWorkTags';
+
+export type RootState = {
+  element: any;
+  isDehydrated: boolean;
+  cache: Cache;
+  pendingSuspenseBoundaries: PendingSuspenseBoundaries | null;
+  transitions: Set<Transition> | null;
+};
 
 class FiberRootNode {
   containerInfo: Container;

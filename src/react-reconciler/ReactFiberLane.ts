@@ -1,4 +1,6 @@
+import { Transition } from './ReactFiberTracingMarkerComponent';
 import { FiberRoot } from './ReactInternalTypes';
+import { ConcurrentUpdatesByDefaultMode, NoMode } from './ReactTypeOfMode';
 
 export type Lanes = number;
 export type Lane = number;
@@ -15,13 +17,43 @@ export const InputContinuousHydrationLane: Lane = /*    */ 0b0000000000000000000
 export const InputContinuousLane: Lane = /*             */ 0b0000000000000000000000000000100;
 
 export const DefaultHydrationLane: Lane = /*            */ 0b0000000000000000000000000001000;
-export const DefaultLane: Lane = /*                     */ 0b0000000000000000000000000010000;
 export const NoTimestamp = -1;
+
+export const DefaultLane: Lane = /*                     */ 0b0000000000000000000000000010000;
+
+const TransitionHydrationLane: Lane = /*                */ 0b0000000000000000000000000100000;
+const TransitionLanes: Lanes = /*                       */ 0b0000000001111111111111111000000;
+const TransitionLane1: Lane = /*                        */ 0b0000000000000000000000001000000;
+const TransitionLane2: Lane = /*                        */ 0b0000000000000000000000010000000;
+const TransitionLane3: Lane = /*                        */ 0b0000000000000000000000100000000;
+const TransitionLane4: Lane = /*                        */ 0b0000000000000000000001000000000;
+const TransitionLane5: Lane = /*                        */ 0b0000000000000000000010000000000;
+const TransitionLane6: Lane = /*                        */ 0b0000000000000000000100000000000;
+const TransitionLane7: Lane = /*                        */ 0b0000000000000000001000000000000;
+const TransitionLane8: Lane = /*                        */ 0b0000000000000000010000000000000;
+const TransitionLane9: Lane = /*                        */ 0b0000000000000000100000000000000;
+const TransitionLane10: Lane = /*                       */ 0b0000000000000001000000000000000;
+const TransitionLane11: Lane = /*                       */ 0b0000000000000010000000000000000;
+const TransitionLane12: Lane = /*                       */ 0b0000000000000100000000000000000;
+const TransitionLane13: Lane = /*                       */ 0b0000000000001000000000000000000;
+const TransitionLane14: Lane = /*                       */ 0b0000000000010000000000000000000;
+const TransitionLane15: Lane = /*                       */ 0b0000000000100000000000000000000;
+const TransitionLane16: Lane = /*                       */ 0b0000000001000000000000000000000;
+
+const RetryLanes: Lanes = /*                            */ 0b0000111110000000000000000000000;
+const RetryLane1: Lane = /*                             */ 0b0000000010000000000000000000000;
+const RetryLane2: Lane = /*                             */ 0b0000000100000000000000000000000;
+const RetryLane3: Lane = /*                             */ 0b0000001000000000000000000000000;
+const RetryLane4: Lane = /*                             */ 0b0000010000000000000000000000000;
+const RetryLane5: Lane = /*                             */ 0b0000100000000000000000000000000;
 
 const NonIdleLanes: Lanes = /*                          */ 0b0001111111111111111111111111111;
 
 export const IdleHydrationLane: Lane = /*               */ 0b0010000000000000000000000000000;
 export const IdleLane: Lane = /*                        */ 0b0100000000000000000000000000000;
+
+// 可能在后台，不显示
+export const OffscreenLane: Lane = /*                   */ 0b1000000000000000000000000000000;
 
 export function getHighestPriorityLane(lanes: Lanes): Lane {
   return lanes & -lanes;
@@ -29,6 +61,41 @@ export function getHighestPriorityLane(lanes: Lanes): Lane {
 // todo lane 模型后续再看
 function laneToIndex(lane: Lane) {
   return 31 - Math.clz32(lane);
+}
+
+export function includesBlockingLane(root: FiberRoot, lanes: Lanes) {
+  // 这个是和startTransition相关的特性
+  // if (
+  //   allowConcurrentByDefault &&
+  //   (root.current.mode & ConcurrentUpdatesByDefaultMode) !== NoMode
+  // ) {
+  //   // Concurrent updates by default always use time slicing.
+  //   return false;
+  // }
+  const SyncDefaultLanes =
+    InputContinuousHydrationLane | InputContinuousLane | DefaultHydrationLane | DefaultLane;
+  return (lanes & SyncDefaultLanes) !== NoLanes;
+}
+
+function pickArbitraryLaneIndex(lanes: Lanes) {
+  return 31 - Math.clz32(lanes);
+}
+
+export function includesExpiredLane(root: FiberRoot, lanes: Lanes) {
+  // This is a separate check from includesBlockingLane because a lane can
+  // expire after a render has already started.
+  return (lanes & root.expiredLanes) !== NoLanes;
+}
+
+export function getLanesToRetrySynchronouslyOnError(root: FiberRoot): Lanes {
+  const everythingButOffscreen = root.pendingLanes & ~OffscreenLane;
+  if (everythingButOffscreen !== NoLanes) {
+    return everythingButOffscreen;
+  }
+  if (everythingButOffscreen & OffscreenLane) {
+    return OffscreenLane;
+  }
+  return NoLanes;
 }
 
 export function markRootUpdated(root: FiberRoot, updateLane: Lane, eventTime: number) {
@@ -194,4 +261,127 @@ export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
 
 export function includesSomeLane(a: Lanes | Lane, b: Lanes | Lane) {
   return (a & b) !== NoLanes;
+}
+
+export function mergeLanes(a: Lanes | Lane, b: Lanes | Lane): Lanes {
+  return a | b;
+}
+
+export function removeLanes(set: Lanes, subset: Lanes | Lane): Lanes {
+  return set & ~subset;
+}
+
+export function intersectLanes(a: Lanes | Lane, b: Lanes | Lane): Lanes {
+  return a & b;
+}
+
+// Seems redundant, but it changes the type from a single lane (used for
+// updates) to a group of lanes (used for flushing work).
+export function laneToLanes(lane: Lane): Lanes {
+  return lane;
+}
+
+export function isTransitionLane(lane: Lane) {
+  return (lane & TransitionLanes) !== NoLanes;
+}
+
+export function markRootSuspended(root: FiberRoot, suspendedLanes: Lanes) {
+  root.suspendedLanes |= suspendedLanes;
+  root.pingedLanes &= ~suspendedLanes;
+
+  // The suspended lanes are no longer CPU-bound. Clear their expiration times.
+  const expirationTimes = root.expirationTimes;
+  let lanes = suspendedLanes;
+  while (lanes > 0) {
+    const index = pickArbitraryLaneIndex(lanes);
+    const lane = 1 << index;
+
+    expirationTimes[index] = NoTimestamp;
+
+    lanes &= ~lane;
+  }
+}
+
+export function getTransitionsForLanes(
+  root: FiberRoot,
+  lanes: Lane | Lanes
+): Array<Transition> | null {
+  return null;
+  // {
+  //   if (!enableTransitionTracing) {
+  //     return null;
+  //   }
+
+  //   const transitionsForLanes = [];
+  //   while (lanes > 0) {
+  //     const index = laneToIndex(lanes);
+  //     const lane = 1 << index;
+  //     const transitions = root.transitionLanes[index];
+  //     if (transitions !== null) {
+  //       transitions.forEach((transition) => {
+  //         transitionsForLanes.push(transition);
+  //       });
+  //     }
+
+  //     lanes &= ~lane;
+  //   }
+
+  //   if (transitionsForLanes.length === 0) {
+  //     return null;
+  //   }
+
+  //   return transitionsForLanes;
+  // }
+}
+
+export function clearTransitionsForLanes(root: FiberRoot, lanes: Lane | Lanes) {
+  return;
+  // {
+  //   if (!enableTransitionTracing) {
+  //     return;
+  //   }
+
+  //   while (lanes > 0) {
+  //     const index = laneToIndex(lanes);
+  //     const lane = 1 << index;
+
+  //     const transitions = root.transitionLanes[index];
+  //     if (transitions !== null) {
+  //       root.transitionLanes[index] = null;
+  //     }
+
+  //     lanes &= ~lane;
+  //   }
+  // }
+}
+
+export function markRootEntangled(root: FiberRoot, entangledLanes: Lanes) {
+  // In addition to entangling each of the given lanes with each other, we also
+  // have to consider _transitive_ entanglements. For each lane that is already
+  // entangled with *any* of the given lanes, that lane is now transitively
+  // entangled with *all* the given lanes.
+  //
+  // Translated: If C is entangled with A, then entangling A with B also
+  // entangles C with B.
+  //
+  // If this is hard to grasp, it might help to intentionally break this
+  // function and look at the tests that fail in ReactTransition-test.js. Try
+  // commenting out one of the conditions below.
+
+  const rootEntangledLanes = (root.entangledLanes |= entangledLanes);
+  const entanglements = root.entanglements;
+  let lanes = rootEntangledLanes;
+  while (lanes) {
+    const index = pickArbitraryLaneIndex(lanes);
+    const lane = 1 << index;
+    if (
+      // Is this one of the newly entangled lanes?
+      (lane & entangledLanes) |
+      // Is this lane transitively entangled with the newly entangled lanes?
+      (entanglements[index] & entangledLanes)
+    ) {
+      entanglements[index] |= entangledLanes;
+    }
+    lanes &= ~lane;
+  }
 }

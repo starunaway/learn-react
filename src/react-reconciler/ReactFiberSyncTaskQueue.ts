@@ -21,6 +21,17 @@ export function scheduleLegacySyncCallback(callback: SchedulerCallback) {
   scheduleSyncCallback(callback);
 }
 
+export function flushSyncCallbacksOnlyInLegacyMode() {
+  // Only flushes the queue if there's a legacy sync callback scheduled.
+  // TODO: There's only a single type of callback: performSyncOnWorkOnRoot. So
+  // it might make more sense for the queue to be a list of roots instead of a
+  // list of generic callbacks. Then we can have two: one for legacy roots, one
+  // for concurrent roots. And this method would only flush the legacy ones.
+  if (includesLegacySyncCallbacks) {
+    flushSyncCallbacks();
+  }
+}
+
 export function flushSyncCallbacks() {
   // todo 首次渲染流程，暂时用不到这个函数，先 hold，后续补充
   return;

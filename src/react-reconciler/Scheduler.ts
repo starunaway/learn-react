@@ -14,3 +14,5 @@ export const LowPriority = Scheduler.LowPriority;
 export const IdlePriority = Scheduler.IdlePriority;
 
 export type SchedulerCallback = (isSync: boolean) => SchedulerCallback | null;
+
+export const requestPaint = Scheduler.requestPaint;
