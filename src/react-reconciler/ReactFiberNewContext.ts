@@ -1,7 +1,8 @@
 import { ReactContext } from '@/shared/ReactTypes';
-import { NoLanes } from './ReactFiberLane';
+import { Lanes, NoLanes, includesSomeLane } from './ReactFiberLane';
 import { isPrimaryRenderer } from './ReactFiberHostConfig';
 import { ContextDependency, Fiber } from './ReactInternalTypes';
+import { markWorkInProgressReceivedUpdate } from './ReactFiberBeginWork';
 
 let currentlyRenderingFiber: Fiber | null = null;
 let lastContextDependency: ContextDependency<any> | null = null;
@@ -55,5 +56,29 @@ export function resetContextDependencies(): void {
   lastFullyObservedContext = null;
   // if (__DEV__) {
   //   isDisallowedContextReadInDEV = false;
+  // }
+}
+
+export function prepareToReadContext(workInProgress: Fiber, renderLanes: Lanes): void {
+  currentlyRenderingFiber = workInProgress;
+  lastContextDependency = null;
+  lastFullyObservedContext = null;
+
+  const dependencies = workInProgress.dependencies;
+  if (dependencies !== null) {
+    // if (enableLazyContextPropagation) {
+    //   // Reset the work-in-progress list
+    //   dependencies.firstContext = null;
+    // } else {
+    const firstContext = dependencies.firstContext;
+    if (firstContext !== null) {
+      if (includesSomeLane(dependencies.lanes, renderLanes)) {
+        // Context list has a pending update. Mark that this fiber performed work.
+        markWorkInProgressReceivedUpdate();
+      }
+      // Reset the work-in-progress list
+      dependencies.firstContext = null;
+    }
+  }
   // }
 }
