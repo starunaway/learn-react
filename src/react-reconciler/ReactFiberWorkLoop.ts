@@ -1464,6 +1464,10 @@ function prepareFreshStack(root: FiberRoot, lanes: Lanes): Fiber {
   return rootWorkInProgress;
 }
 
+export function markSkippedUpdateLanes(lane: Lane | Lanes): void {
+  workInProgressRootSkippedLanes = mergeLanes(lane, workInProgressRootSkippedLanes);
+}
+
 function renderRootSync(root: FiberRoot, lanes: Lanes) {
   const prevExecutionContext = executionContext;
   executionContext |= RenderContext;

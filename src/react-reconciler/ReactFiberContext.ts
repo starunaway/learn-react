@@ -11,7 +11,7 @@ let previousContext: Object = emptyContextObject;
 // 不启动
 const disableLegacyContext = false;
 
-function hasContextChanged(): boolean {
+export function hasContextChanged(): boolean {
   if (disableLegacyContext) {
     return false;
   } else {
@@ -71,7 +71,7 @@ export function findCurrentUnmaskedContext(fiber: Fiber): Object {
   // }
 }
 
-function isContextProvider(type: Function & { childContextTypes?: any }): boolean {
+export function isContextProvider(type: Function & { childContextTypes?: any }): boolean {
   if (disableLegacyContext) {
     return false;
   } else {
@@ -80,7 +80,11 @@ function isContextProvider(type: Function & { childContextTypes?: any }): boolea
   }
 }
 
-function cacheContext(workInProgress: Fiber, unmaskedContext: Object, maskedContext: Object): void {
+export function cacheContext(
+  workInProgress: Fiber,
+  unmaskedContext: Object,
+  maskedContext: Object
+): void {
   if (disableLegacyContext) {
     return;
   } else {
@@ -147,6 +151,27 @@ export function getMaskedContext(
     }
 
     return context;
+  }
+}
+
+export function pushContextProvider(workInProgress: Fiber): boolean {
+  if (disableLegacyContext) {
+    return false;
+  } else {
+    const instance = workInProgress.stateNode;
+    // We push the context as early as possible to ensure stack integrity.
+    // If the instance does not exist yet, we will push null at first,
+    // and replace it on the stack later when invalidating the context.
+    const memoizedMergedChildContext =
+      (instance && instance.__reactInternalMemoizedMergedChildContext) || emptyContextObject;
+
+    // Remember the parent context so we can merge with it later.
+    // Inherit the parent's did-perform-work value to avoid inadvertently blocking updates.
+    previousContext = contextStackCursor.current;
+    push(contextStackCursor, memoizedMergedChildContext, workInProgress);
+    push(didPerformWorkStackCursor, didPerformWorkStackCursor.current, workInProgress);
+
+    return true;
   }
 }
 

@@ -98,6 +98,10 @@ export function getLanesToRetrySynchronouslyOnError(root: FiberRoot): Lanes {
   return NoLanes;
 }
 
+export function isSubsetOfLanes(set: Lanes, subset: Lanes | Lane) {
+  return (set & subset) === subset;
+}
+
 export function markRootUpdated(root: FiberRoot, updateLane: Lane, eventTime: number) {
   root.pendingLanes |= updateLane;
 

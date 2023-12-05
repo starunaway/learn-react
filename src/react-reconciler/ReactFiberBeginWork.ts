@@ -4,6 +4,9 @@ import {
   getUnmaskedContext,
   hasLegacyContextChanged,
   pushTopLevelContextObject,
+  pushContextProvider as pushLegacyContextProvider,
+  isContextProvider as isLegacyContextProvider,
+  invalidateContextProvider,
 } from './ReactFiberContext';
 import {
   DidCapture,
@@ -16,6 +19,7 @@ import {
 } from './ReactFiberFlags';
 import { Lanes, NoLanes, includesSomeLane } from './ReactFiberLane';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
+import { mountChildFibers, reconcileChildFibers, cloneChildFibers } from './ReactChildFiber';
 import {
   CacheComponent,
   ClassComponent,
@@ -39,6 +43,14 @@ import {
   TracingMarkerComponent,
 } from './ReactWorkTags';
 
+import {
+  adoptClassInstance,
+  constructClassInstance,
+  mountClassInstance,
+  resumeMountClassInstance,
+  updateClassInstance,
+} from './ReactFiberClassComponent';
+
 import { resolveDefaultProps } from './ReactFiberLazyComponent';
 import { RootState } from './ReactFiberRoot';
 import { supportsHydration } from './ReactFiberHostConfig';
@@ -47,11 +59,16 @@ import { ReactNodeList } from '@/shared/ReactTypes';
 import { CapturedValue } from './ReactCapturedValue';
 import { pushHostContainer, pushHostContext } from './ReactFiberHostContext';
 import { pushRootTransition } from './ReactFiberTransition';
-import { resetHydrationState } from './ReactFiberHydrationContext';
+import { getIsHydrating, resetHydrationState } from './ReactFiberHydrationContext';
 import { ConcurrentMode, NoMode } from './ReactTypeOfMode';
 import { prepareToReadContext } from './ReactFiberNewContext';
-import { checkDidRenderIdHook, renderWithHooks } from './ReactFiberHooks';
-
+import { bailoutHooks, checkDidRenderIdHook, renderWithHooks } from './ReactFiberHooks';
+import {
+  processUpdateQueue,
+  cloneUpdateQueue,
+  initializeUpdateQueue,
+  enqueueCapturedUpdate,
+} from './ReactFiberClassUpdateQueue';
 const ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
 
 let didReceiveUpdate: boolean = false;
@@ -83,6 +100,34 @@ function checkScheduledUpdateOrContext(current: Fiber, renderLanes: Lanes): bool
   //   }
   // }
   return false;
+}
+
+export function reconcileChildren(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  nextChildren: any,
+  renderLanes: Lanes
+) {
+  if (current === null) {
+    // If this is a fresh new component that hasn't been rendered yet, we
+    // won't update its child set by applying minimal side-effects. Instead,
+    // we will add them all to the child before it gets rendered. That means
+    // we can optimize this reconciliation pass by not tracking side-effects.
+    workInProgress.child = mountChildFibers(workInProgress, null, nextChildren, renderLanes);
+  } else {
+    // If the current child is the same as the work in progress, it means that
+    // we haven't yet started any work on these children. Therefore, we use
+    // the clone algorithm to create a copy of all the current children.
+
+    // If we had any progressed work already, that is invalid at this point so
+    // let's throw it out.
+    workInProgress.child = reconcileChildFibers(
+      workInProgress,
+      current.child,
+      nextChildren,
+      renderLanes
+    );
+  }
 }
 
 function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
@@ -821,9 +866,9 @@ function updateFunctionComponent(
   let nextChildren;
   let hasId;
   prepareToReadContext(workInProgress, renderLanes);
-  if (enableSchedulingProfiler) {
-    markComponentRenderStarted(workInProgress);
-  }
+  // if (enableSchedulingProfiler) {
+  //   markComponentRenderStarted(workInProgress);
+  // }
   // if (__DEV__) {
   //   ReactCurrentOwner.current = workInProgress;
   //   setIsRendering(true);
@@ -991,6 +1036,95 @@ function updateClassComponent(
   //   }
   // }
   return nextUnitOfWork;
+}
+
+function finishClassComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  Component: any,
+  shouldUpdate: boolean,
+  hasContext: boolean,
+  renderLanes: Lanes
+) {
+  // Refs should update even if shouldComponentUpdate returns false
+  markRef(current, workInProgress);
+
+  const didCaptureError = (workInProgress.flags & DidCapture) !== NoFlags;
+
+  if (!shouldUpdate && !didCaptureError) {
+    // Context providers should defer to sCU for rendering
+    if (hasContext) {
+      invalidateContextProvider(workInProgress, Component, false);
+    }
+
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+  }
+
+  const instance = workInProgress.stateNode;
+
+  // Rerender
+  ReactCurrentOwner.current = workInProgress;
+  let nextChildren;
+  if (didCaptureError && typeof Component.getDerivedStateFromError !== 'function') {
+    // If we captured an error, but getDerivedStateFromError is not defined,
+    // unmount all the children. componentDidCatch will schedule an update to
+    // re-render a fallback. This is temporary until we migrate everyone to
+    // the new API.
+    // TODO: Warn in a future release.
+    nextChildren = null;
+
+    // if (enableProfilerTimer) {
+    //   stopProfilerTimerIfRunning(workInProgress);
+    // }
+  } else {
+    // if (enableSchedulingProfiler) {
+    //   markComponentRenderStarted(workInProgress);
+    // }
+    // if (__DEV__) {
+    //   setIsRendering(true);
+    //   nextChildren = instance.render();
+    //   if (
+    //     debugRenderPhaseSideEffectsForStrictMode &&
+    //     workInProgress.mode & StrictLegacyMode
+    //   ) {
+    //     setIsStrictModeForDevtools(true);
+    //     try {
+    //       instance.render();
+    //     } finally {
+    //       setIsStrictModeForDevtools(false);
+    //     }
+    //   }
+    //   setIsRendering(false);
+    // } else {
+    nextChildren = instance.render();
+    // }
+    // if (enableSchedulingProfiler) {
+    //   markComponentRenderStopped();
+    // }
+  }
+
+  // React DevTools reads this flag.
+  workInProgress.flags |= PerformedWork;
+  if (current !== null && didCaptureError) {
+    // If we're recovering from an error, reconcile without reusing any of
+    // the existing children. Conceptually, the normal children and the children
+    // that are shown on error are two different sets, so we shouldn't reuse
+    // normal children even if their identities match.
+    forceUnmountCurrentAndReconcile(current, workInProgress, nextChildren, renderLanes);
+  } else {
+    reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  }
+
+  // Memoize state using the values we just used to render.
+  // TODO: Restructure so we never read values from the instance.
+  workInProgress.memoizedState = instance.state;
+
+  // The context might have changed so we need to recalculate it.
+  if (hasContext) {
+    invalidateContextProvider(workInProgress, Component, true);
+  }
+
+  return workInProgress.child;
 }
 
 function updateHostRoot(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes) {
@@ -1167,7 +1301,7 @@ function updateHostComponent(current: Fiber | null, workInProgress: Fiber, rende
   return workInProgress.child;
 }
 
-function updateHostText(current, workInProgress) {
+function updateHostText(current: null | Fiber, workInProgress) {
   if (current === null) {
     tryToClaimNextHydratableInstance(workInProgress);
   }

@@ -46,3 +46,15 @@ export type ReactContext<T> = {
   _defaultValue: T;
   _globalName: string;
 };
+
+export type ReactPortal = {
+  $$typeof: Symbol | number;
+  key: null | string;
+  containerInfo: any;
+  children: ReactNodeList;
+  // TODO: figure out the API for cross-renderer implementation.
+  implementation: any;
+  [key: string]: any;
+};
+
+export type ReactFragment = ReactEmpty | Iterable<ReactNode>;
