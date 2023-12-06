@@ -58,3 +58,60 @@ export type ReactPortal = {
 };
 
 export type ReactFragment = ReactEmpty | Iterable<ReactNode>;
+export type MutableSourceVersion = any;
+
+export type MutableSourceGetVersionFn = (source: any) => MutableSourceVersion;
+
+export type MutableSource<Source extends any> = {
+  _source: Source;
+
+  _getVersion: MutableSourceGetVersionFn;
+
+  // Tracks the version of this source at the time it was most recently read.
+  // Used to determine if a source is safe to read from before it has been subscribed to.
+  // Version number is only used during mount,
+  // since the mechanism for determining safety after subscription is expiration time.
+  //
+  // As a workaround to support multiple concurrent renderers,
+  // we categorize some renderers as primary and others as secondary.
+  // We only expect there to be two concurrent renderers at most:
+  // React Native (primary) and Fabric (secondary);
+  // React DOM (primary) and React ART (secondary).
+  // Secondary renderers store their context values on separate fields.
+  // We use the same approach for Context.
+  _workInProgressVersionPrimary: null | MutableSourceVersion;
+  _workInProgressVersionSecondary: null | MutableSourceVersion;
+
+  // DEV only
+  // Used to detect multiple renderers using the same mutable source.
+  // _currentPrimaryRenderer?: Object | null,
+  // _currentSecondaryRenderer?: Object | null,
+
+  // DEV only
+  // Used to detect side effects that update a mutable source during render.
+  // See https://github.com/facebook/react/issues/19948
+  // _currentlyRenderingFiber?: Fiber | null,
+  // _initialVersionAsOfFirstRender?: MutableSourceVersion | null,
+};
+
+// The subset of a Thenable required by things thrown by Suspense.
+// This doesn't require a value to be passed to either handler.
+export interface Wakeable {
+  then(onFulfill: () => any, onReject: () => any): void | Wakeable;
+}
+
+// The subset of a Promise that React APIs rely on. This resolves a value.
+// This doesn't require a return value neither from the handler nor the
+// then function.
+export interface Thenable<R> {
+  then<U>(
+    onFulfill: (value: R) => void | Thenable<U> | U,
+    onReject: (error: any) => void | Thenable<U> | U
+  ): void | Thenable<U>;
+}
+
+export type OffscreenMode = 'hidden' | 'unstable-defer-without-hiding' | 'visible';
+
+export type StartTransitionOptions = {
+  name?: string;
+};

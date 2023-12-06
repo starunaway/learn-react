@@ -1,4 +1,13 @@
-import { ChildDeletion, LayoutMask, NoFlags, Passive, PassiveMask, Ref, Update } from './ReactFiberFlags';
+import {
+  ChildDeletion,
+  ContentReset,
+  LayoutMask,
+  NoFlags,
+  Passive,
+  PassiveMask,
+  Ref,
+  Update,
+} from './ReactFiberFlags';
 import { Lanes } from './ReactFiberLane';
 import { Transition } from './ReactFiberTracingMarkerComponent';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
@@ -12,7 +21,9 @@ import {
   ClassComponent,
   ForwardRef,
   FunctionComponent,
+  HostComponent,
   HostRoot,
+  HostText,
   LegacyHiddenComponent,
   MemoComponent,
   OffscreenComponent,
@@ -20,23 +31,18 @@ import {
 } from './ReactWorkTags';
 import { captureCommitPhaseError } from './ReactFiberWorkLoop';
 import { ConcurrentMode, NoMode } from './ReactTypeOfMode';
+import { Instance } from './ReactFiberHostConfig';
 let nextEffect: Fiber | null = null;
 
 let inProgressLanes: Lanes | null = null;
 let inProgressRoot: FiberRoot | null = null;
-
-
-
-
-
-
 
 // 702
 function commitLayoutEffectOnFiber(
   finishedRoot: FiberRoot,
   current: Fiber | null,
   finishedWork: Fiber,
-  committedLanes: Lanes,
+  committedLanes: Lanes
 ): void {
   if ((finishedWork.flags & LayoutMask) !== NoFlags) {
     switch (finishedWork.tag) {
@@ -68,7 +74,7 @@ function commitLayoutEffectOnFiber(
           //     recordLayoutEffectDuration(finishedWork);
           //   }
           // } else {
-            commitHookEffectListMount(HookLayout | HookHasEffect, finishedWork);
+          commitHookEffectListMount(HookLayout | HookHasEffect, finishedWork);
           // }
         }
         break;
@@ -76,9 +82,9 @@ function commitLayoutEffectOnFiber(
       case ClassComponent: {
         const instance = finishedWork.stateNode;
         if (finishedWork.flags & Update) {
-                  // 默认开启
+          // 默认开启
           // if (!offscreenSubtreeWasHidden) {
-            if (true) {
+          if (true) {
             if (current === null) {
               // We could update instance props and state here,
               // but instead we rely on them being set during last render.
@@ -124,16 +130,13 @@ function commitLayoutEffectOnFiber(
               //     recordLayoutEffectDuration(finishedWork);
               //   }
               // } else {
-                instance.componentDidMount();
+              instance.componentDidMount();
               // }
             } else {
               const prevProps =
                 finishedWork.elementType === finishedWork.type
                   ? current.memoizedProps
-                  : resolveDefaultProps(
-                      finishedWork.type,
-                      current.memoizedProps,
-                    );
+                  : resolveDefaultProps(finishedWork.type, current.memoizedProps);
               const prevState = current.memoizedState;
               // We could update instance props and state here,
               // but instead we rely on them being set during last render.
@@ -181,11 +184,11 @@ function commitLayoutEffectOnFiber(
               //     recordLayoutEffectDuration(finishedWork);
               //   }
               // } else {
-                instance.componentDidUpdate(
-                  prevProps,
-                  prevState,
-                  instance.__reactInternalSnapshotBeforeUpdate,
-                );
+              instance.componentDidUpdate(
+                prevProps,
+                prevState,
+                instance.__reactInternalSnapshotBeforeUpdate
+              );
               // }
             }
           }
@@ -193,9 +196,7 @@ function commitLayoutEffectOnFiber(
 
         // TODO: I think this is now always non-null by the time it reaches the
         // commit phase. Consider removing the type check.
-        const updateQueue: UpdateQueue<
-         any
-        > | null = (finishedWork.updateQueue);
+        const updateQueue: UpdateQueue<any> | null = finishedWork.updateQueue;
         if (updateQueue !== null) {
           // if (__DEV__) {
           //   if (
@@ -234,9 +235,7 @@ function commitLayoutEffectOnFiber(
       case HostRoot: {
         // TODO: I think this is now always non-null by the time it reaches the
         // commit phase. Consider removing the type check.
-        const updateQueue: UpdateQueue<
-         any
-        > | null = (finishedWork.updateQueue);
+        const updateQueue: UpdateQueue<any> | null = finishedWork.updateQueue;
         if (updateQueue !== null) {
           let instance = null;
           if (finishedWork.child !== null) {
@@ -352,23 +351,23 @@ function commitLayoutEffectOnFiber(
       default:
         throw new Error(
           'This unit of work tag should not have side-effects. This error is ' +
-            'likely caused by a bug in React. Please file an issue.',
+            'likely caused by a bug in React. Please file an issue.'
         );
     }
   }
 
   if (!enableSuspenseLayoutEffectSemantics || !offscreenSubtreeWasHidden) {
-    if (enableScopeAPI) {
-      // TODO: This is a temporary solution that allowed us to transition away
-      // from React Flare on www.
-      if (finishedWork.flags & Ref && finishedWork.tag !== ScopeComponent) {
-        commitAttachRef(finishedWork);
-      }
-    } else {
-      if (finishedWork.flags & Ref) {
-        commitAttachRef(finishedWork);
-      }
+    // if (enableScopeAPI) {
+    //   // TODO: This is a temporary solution that allowed us to transition away
+    //   // from React Flare on www.
+    //   if (finishedWork.flags & Ref && finishedWork.tag !== ScopeComponent) {
+    //     commitAttachRef(finishedWork);
+    //   }
+    // } else {
+    if (finishedWork.flags & Ref) {
+      commitAttachRef(finishedWork);
     }
+    // }
   }
 }
 
@@ -435,13 +434,6 @@ function commitPassiveMountEffects_complete(
   }
 }
 
-
-
-
-
-
-
-
 // 2036
 export function commitMutationEffects(root: FiberRoot, finishedWork: Fiber, committedLanes: Lanes) {
   inProgressLanes = committedLanes;
@@ -455,14 +447,8 @@ export function commitMutationEffects(root: FiberRoot, finishedWork: Fiber, comm
   inProgressRoot = null;
 }
 
-
-
 // 2083
-function commitMutationEffectsOnFiber(
-  finishedWork: Fiber,
-  root: FiberRoot,
-  lanes: Lanes,
-) {
+function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot, lanes: Lanes) {
   const current = finishedWork.alternate;
   const flags = finishedWork.flags;
 
@@ -570,28 +556,16 @@ function commitMutationEffectsOnFiber(
             // For hydration we reuse the update path but we treat the oldProps
             // as the newProps. The updatePayload will contain the real change in
             // this case.
-            const oldProps =
-              current !== null ? current.memoizedProps : newProps;
+            const oldProps = current !== null ? current.memoizedProps : newProps;
             const type = finishedWork.type;
             // TODO: Type the updateQueue to be specific to host components.
-            const updatePayload: null | UpdatePayload = (finishedWork.updateQueue: any);
+            const updatePayload: null | UpdatePayload = finishedWork.updateQueue;
             finishedWork.updateQueue = null;
             if (updatePayload !== null) {
               try {
-                commitUpdate(
-                  instance,
-                  updatePayload,
-                  type,
-                  oldProps,
-                  newProps,
-                  finishedWork,
-                );
+                commitUpdate(instance, updatePayload, type, oldProps, newProps, finishedWork);
               } catch (error) {
-                captureCommitPhaseError(
-                  finishedWork,
-                  finishedWork.return,
-                  error,
-                );
+                captureCommitPhaseError(finishedWork, finishedWork.return, error);
               }
             }
           }
@@ -608,7 +582,7 @@ function commitMutationEffectsOnFiber(
           if (finishedWork.stateNode === null) {
             throw new Error(
               'This should have a text node initialized. This error is likely ' +
-                'caused by a bug in React. Please file an issue.',
+                'caused by a bug in React. Please file an issue.'
             );
           }
 
@@ -617,8 +591,7 @@ function commitMutationEffectsOnFiber(
           // For hydration we reuse the update path but we treat the oldProps
           // as the newProps. The updatePayload will contain the real change in
           // this case.
-          const oldText: string =
-            current !== null ? current.memoizedProps : newText;
+          const oldText: string = current !== null ? current.memoizedProps : newText;
 
           try {
             commitTextUpdate(textInstance, oldText, newText);
@@ -641,11 +614,7 @@ function commitMutationEffectsOnFiber(
               try {
                 commitHydratedContainer(root.containerInfo);
               } catch (error) {
-                captureCommitPhaseError(
-                  finishedWork,
-                  finishedWork.return,
-                  error,
-                );
+                captureCommitPhaseError(finishedWork, finishedWork.return, error);
               }
             }
           }
@@ -680,42 +649,42 @@ function commitMutationEffectsOnFiber(
     //   }
     //   return;
     // }
-    case SuspenseComponent: {
-      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
-      commitReconciliationEffects(finishedWork);
+    // case SuspenseComponent: {
+    //   recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+    //   commitReconciliationEffects(finishedWork);
 
-      const offscreenFiber: Fiber = (finishedWork.child: any);
+    //   const offscreenFiber: Fiber = (finishedWork.child: any);
 
-      if (offscreenFiber.flags & Visibility) {
-        const offscreenInstance: OffscreenInstance = offscreenFiber.stateNode;
-        const newState: OffscreenState | null = offscreenFiber.memoizedState;
-        const isHidden = newState !== null;
+    //   if (offscreenFiber.flags & Visibility) {
+    //     const offscreenInstance: OffscreenInstance = offscreenFiber.stateNode;
+    //     const newState: OffscreenState | null = offscreenFiber.memoizedState;
+    //     const isHidden = newState !== null;
 
-        // Track the current state on the Offscreen instance so we can
-        // read it during an event
-        offscreenInstance.isHidden = isHidden;
+    //     // Track the current state on the Offscreen instance so we can
+    //     // read it during an event
+    //     offscreenInstance.isHidden = isHidden;
 
-        if (isHidden) {
-          const wasHidden =
-            offscreenFiber.alternate !== null &&
-            offscreenFiber.alternate.memoizedState !== null;
-          if (!wasHidden) {
-            // TODO: Move to passive phase
-            markCommitTimeOfFallback();
-          }
-        }
-      }
+    //     if (isHidden) {
+    //       const wasHidden =
+    //         offscreenFiber.alternate !== null &&
+    //         offscreenFiber.alternate.memoizedState !== null;
+    //       if (!wasHidden) {
+    //         // TODO: Move to passive phase
+    //         markCommitTimeOfFallback();
+    //       }
+    //     }
+    //   }
 
-      if (flags & Update) {
-        try {
-          commitSuspenseCallback(finishedWork);
-        } catch (error) {
-          captureCommitPhaseError(finishedWork, finishedWork.return, error);
-        }
-        attachSuspenseRetryListeners(finishedWork);
-      }
-      return;
-    }
+    //   if (flags & Update) {
+    //     try {
+    //       commitSuspenseCallback(finishedWork);
+    //     } catch (error) {
+    //       captureCommitPhaseError(finishedWork, finishedWork.return, error);
+    //     }
+    //     attachSuspenseRetryListeners(finishedWork);
+    //   }
+    //   return;
+    // }
     // case OffscreenComponent: {
     //   const wasHidden = current !== null && current.memoizedState !== null;
 
@@ -813,13 +782,11 @@ function commitMutationEffectsOnFiber(
   }
 }
 
-
-
 // 2459
 export function commitLayoutEffects(
   finishedWork: Fiber,
   root: FiberRoot,
-  committedLanes: Lanes,
+  committedLanes: Lanes
 ): void {
   inProgressLanes = committedLanes;
   inProgressRoot = root;
@@ -831,12 +798,7 @@ export function commitLayoutEffects(
   inProgressRoot = null;
 }
 
-
-function commitLayoutEffects_begin(
-  subtreeRoot: Fiber,
-  root: FiberRoot,
-  committedLanes: Lanes,
-) {
+function commitLayoutEffects_begin(subtreeRoot: Fiber, root: FiberRoot, committedLanes: Lanes) {
   // Suspense layout effects semantics don't change for legacy roots.
   const isModernRoot = (subtreeRoot.mode & ConcurrentMode) !== NoMode;
 
@@ -906,11 +868,10 @@ function commitLayoutEffects_begin(
   }
 }
 
-
 function commitLayoutMountEffects_complete(
   subtreeRoot: Fiber,
   root: FiberRoot,
-  committedLanes: Lanes,
+  committedLanes: Lanes
 ) {
   while (nextEffect !== null) {
     const fiber = nextEffect;
@@ -940,9 +901,6 @@ function commitLayoutMountEffects_complete(
     nextEffect = fiber.return;
   }
 }
-
-
-
 
 // 2801
 function commitPassiveMountOnFiber(
@@ -1136,14 +1094,11 @@ function commitPassiveMountOnFiber(
   }
 }
 
-
-
 // 2992
 export function commitPassiveUnmountEffects(firstChild: Fiber): void {
   nextEffect = firstChild;
   commitPassiveUnmountEffects_begin();
 }
-
 
 function commitPassiveUnmountEffects_begin() {
   while (nextEffect !== null) {
@@ -1156,10 +1111,7 @@ function commitPassiveUnmountEffects_begin() {
         for (let i = 0; i < deletions.length; i++) {
           const fiberToDelete = deletions[i];
           nextEffect = fiberToDelete;
-          commitPassiveUnmountEffectsInsideOfDeletedTree_begin(
-            fiberToDelete,
-            fiber,
-          );
+          commitPassiveUnmountEffectsInsideOfDeletedTree_begin(fiberToDelete, fiber);
         }
 
         if (deletedTreeCleanUpLevel >= 1) {

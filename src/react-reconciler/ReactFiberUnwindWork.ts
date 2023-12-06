@@ -1,7 +1,17 @@
 import { Lanes } from './ReactFiberLane';
+import { popRootTransition, popTransition } from './ReactFiberTransition';
 import { popTreeContext } from './ReactFiberTreeContext';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
-import { ClassComponent, HostRoot } from './ReactWorkTags';
+import { ClassComponent, HostComponent, HostRoot } from './ReactWorkTags';
+import { popHostContainer, popHostContext } from './ReactFiberHostContext';
+import { DidCapture, NoFlags, ShouldCapture } from './ReactFiberFlags';
+import {
+  // isContextProvider as isLegacyContextProvider,
+  popContext as popLegacyContext,
+  popTopLevelContextObject as popTopLevelLegacyContextObject,
+} from './ReactFiberContext';
+
+import { resetWorkInProgressVersions as resetMutableSourceWorkInProgressVersions } from './ReactMutableSource';
 
 function unwindWork(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes) {
   // Note: This intentionally doesn't check if we're hydrating because comparing
@@ -53,55 +63,55 @@ function unwindWork(current: Fiber | null, workInProgress: Fiber, renderLanes: L
       popHostContext(workInProgress);
       return null;
     }
-    case SuspenseComponent: {
-      popSuspenseContext(workInProgress);
-      const suspenseState: null | SuspenseState = workInProgress.memoizedState;
-      if (suspenseState !== null && suspenseState.dehydrated !== null) {
-        if (workInProgress.alternate === null) {
-          throw new Error(
-            'Threw in newly mounted dehydrated component. This is likely a bug in ' +
-              'React. Please file an issue.'
-          );
-        }
+    // case SuspenseComponent: {
+    //   popSuspenseContext(workInProgress);
+    //   const suspenseState: null | SuspenseState = workInProgress.memoizedState;
+    //   if (suspenseState !== null && suspenseState.dehydrated !== null) {
+    //     if (workInProgress.alternate === null) {
+    //       throw new Error(
+    //         'Threw in newly mounted dehydrated component. This is likely a bug in ' +
+    //           'React. Please file an issue.'
+    //       );
+    //     }
 
-        resetHydrationState();
-      }
+    //     resetHydrationState();
+    //   }
 
-      const flags = workInProgress.flags;
-      if (flags & ShouldCapture) {
-        workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
-        // Captured a suspense effect. Re-render the boundary.
-        if (enableProfilerTimer && (workInProgress.mode & ProfileMode) !== NoMode) {
-          transferActualDuration(workInProgress);
-        }
-        return workInProgress;
-      }
-      return null;
-    }
-    case SuspenseListComponent: {
-      popSuspenseContext(workInProgress);
-      // SuspenseList doesn't actually catch anything. It should've been
-      // caught by a nested boundary. If not, it should bubble through.
-      return null;
-    }
-    case HostPortal:
-      popHostContainer(workInProgress);
-      return null;
-    case ContextProvider:
-      const context: ReactContext<any> = workInProgress.type._context;
-      popProvider(context, workInProgress);
-      return null;
-    case OffscreenComponent:
-    case LegacyHiddenComponent:
-      popRenderLanes(workInProgress);
-      popTransition(workInProgress, current);
-      return null;
-    case CacheComponent:
-      if (enableCache) {
-        const cache: Cache = workInProgress.memoizedState.cache;
-        popCacheProvider(workInProgress, cache);
-      }
-      return null;
+    //   const flags = workInProgress.flags;
+    //   if (flags & ShouldCapture) {
+    //     workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
+    //     // Captured a suspense effect. Re-render the boundary.
+    //     if (enableProfilerTimer && (workInProgress.mode & ProfileMode) !== NoMode) {
+    //       transferActualDuration(workInProgress);
+    //     }
+    //     return workInProgress;
+    //   }
+    //   return null;
+    // }
+    // case SuspenseListComponent: {
+    //   popSuspenseContext(workInProgress);
+    //   // SuspenseList doesn't actually catch anything. It should've been
+    //   // caught by a nested boundary. If not, it should bubble through.
+    //   return null;
+    // }
+    // case HostPortal:
+    //   popHostContainer(workInProgress);
+    //   return null;
+    // case ContextProvider:
+    //   const context: ReactContext<any> = workInProgress.type._context;
+    //   popProvider(context, workInProgress);
+    //   return null;
+    // case OffscreenComponent:
+    // case LegacyHiddenComponent:
+    //   popRenderLanes(workInProgress);
+    //   popTransition(workInProgress, current);
+    //   return null;
+    // case CacheComponent:
+    //   if (enableCache) {
+    //     const cache: Cache = workInProgress.memoizedState.cache;
+    //     popCacheProvider(workInProgress, cache);
+    //   }
+    //   return null;
     default:
       return null;
   }
@@ -123,10 +133,10 @@ function unwindInterruptedWork(current: Fiber | null, interruptedWork: Fiber, re
     }
     case HostRoot: {
       const root: FiberRoot = interruptedWork.stateNode;
-      if (enableCache) {
-        const cache: Cache = interruptedWork.memoizedState.cache;
-        popCacheProvider(interruptedWork, cache);
-      }
+      // if (enableCache) {
+      //   const cache: Cache = interruptedWork.memoizedState.cache;
+      //   popCacheProvider(interruptedWork, cache);
+      // }
       popRootTransition(interruptedWork, root, renderLanes);
       popHostContainer(interruptedWork);
       popTopLevelLegacyContextObject(interruptedWork);
@@ -137,30 +147,30 @@ function unwindInterruptedWork(current: Fiber | null, interruptedWork: Fiber, re
       popHostContext(interruptedWork);
       break;
     }
-    case HostPortal:
-      popHostContainer(interruptedWork);
-      break;
-    case SuspenseComponent:
-      popSuspenseContext(interruptedWork);
-      break;
-    case SuspenseListComponent:
-      popSuspenseContext(interruptedWork);
-      break;
-    case ContextProvider:
-      const context: ReactContext<any> = interruptedWork.type._context;
-      popProvider(context, interruptedWork);
-      break;
-    case OffscreenComponent:
-    case LegacyHiddenComponent:
-      popRenderLanes(interruptedWork);
-      popTransition(interruptedWork, current);
-      break;
-    case CacheComponent:
-      if (enableCache) {
-        const cache: Cache = interruptedWork.memoizedState.cache;
-        popCacheProvider(interruptedWork, cache);
-      }
-      break;
+    // case HostPortal:
+    //   popHostContainer(interruptedWork);
+    //   break;
+    // case SuspenseComponent:
+    //   popSuspenseContext(interruptedWork);
+    //   break;
+    // case SuspenseListComponent:
+    //   popSuspenseContext(interruptedWork);
+    //   break;
+    // case ContextProvider:
+    //   const context: ReactContext<any> = interruptedWork.type._context;
+    //   popProvider(context, interruptedWork);
+    //   break;
+    // case OffscreenComponent:
+    // case LegacyHiddenComponent:
+    //   popRenderLanes(interruptedWork);
+    //   popTransition(interruptedWork, current);
+    //   break;
+    // case CacheComponent:
+    //   if (enableCache) {
+    //     const cache: Cache = interruptedWork.memoizedState.cache;
+    //     popCacheProvider(interruptedWork, cache);
+    //   }
+    //   break;
     default:
       break;
   }

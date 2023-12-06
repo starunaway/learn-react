@@ -11,7 +11,7 @@ let previousContext: Object = emptyContextObject;
 // 不启动
 const disableLegacyContext = false;
 
-export function hasContextChanged(): boolean {
+function hasContextChanged(): boolean {
   if (disableLegacyContext) {
     return false;
   } else {
@@ -35,7 +35,7 @@ function pushTopLevelContextObject(fiber: Fiber, context: Object, didChange: boo
   }
 }
 
-export function findCurrentUnmaskedContext(fiber: Fiber): Object {
+function findCurrentUnmaskedContext(fiber: Fiber): Object {
   // if (disableLegacyContext) {
   return emptyContextObject;
   // } else {
@@ -71,7 +71,7 @@ export function findCurrentUnmaskedContext(fiber: Fiber): Object {
   // }
 }
 
-export function isContextProvider(type: Function & { childContextTypes?: any }): boolean {
+function isContextProvider(type: Function & { childContextTypes?: any }): boolean {
   if (disableLegacyContext) {
     return false;
   } else {
@@ -80,11 +80,7 @@ export function isContextProvider(type: Function & { childContextTypes?: any }):
   }
 }
 
-export function cacheContext(
-  workInProgress: Fiber,
-  unmaskedContext: Object,
-  maskedContext: Object
-): void {
+function cacheContext(workInProgress: Fiber, unmaskedContext: Object, maskedContext: Object): void {
   if (disableLegacyContext) {
     return;
   } else {
@@ -94,7 +90,7 @@ export function cacheContext(
   }
 }
 
-export function getUnmaskedContext(
+function getUnmaskedContext(
   workInProgress: Fiber,
   Component: Function,
   didPushOwnContextIfProvider: boolean
@@ -113,7 +109,7 @@ export function getUnmaskedContext(
   }
 }
 
-export function getMaskedContext(
+function getMaskedContext(
   workInProgress: Fiber,
   unmaskedContext: Record<string, any>
 ): Record<string, any> {
@@ -154,7 +150,7 @@ export function getMaskedContext(
   }
 }
 
-export function pushContextProvider(workInProgress: Fiber): boolean {
+function pushContextProvider(workInProgress: Fiber): boolean {
   if (disableLegacyContext) {
     return false;
   } else {
@@ -175,7 +171,7 @@ export function pushContextProvider(workInProgress: Fiber): boolean {
   }
 }
 
-export function processChildContext(fiber: Fiber, type: any, parentContext: Object): Object {
+function processChildContext(fiber: Fiber, type: any, parentContext: Object): Object {
   if (disableLegacyContext) {
     return parentContext;
   } else {
@@ -221,13 +217,7 @@ export function processChildContext(fiber: Fiber, type: any, parentContext: Obje
   }
 }
 
-export { hasContextChanged as hasLegacyContextChanged, pushTopLevelContextObject };
-
-export function invalidateContextProvider(
-  workInProgress: Fiber,
-  type: any,
-  didChange: boolean
-): void {
+function invalidateContextProvider(workInProgress: Fiber, type: any, didChange: boolean): void {
   if (disableLegacyContext) {
     return;
   } else {
@@ -260,3 +250,37 @@ export function invalidateContextProvider(
     }
   }
 }
+
+function popContext(fiber: Fiber): void {
+  if (disableLegacyContext) {
+    return;
+  } else {
+    pop(didPerformWorkStackCursor, fiber);
+    pop(contextStackCursor, fiber);
+  }
+}
+
+function popTopLevelContextObject(fiber: Fiber): void {
+  if (disableLegacyContext) {
+    return;
+  } else {
+    pop(didPerformWorkStackCursor, fiber);
+    pop(contextStackCursor, fiber);
+  }
+}
+
+export {
+  getUnmaskedContext,
+  cacheContext,
+  getMaskedContext,
+  hasContextChanged,
+  hasContextChanged as hasLegacyContextChanged,
+  popContext,
+  popTopLevelContextObject,
+  pushTopLevelContextObject,
+  processChildContext,
+  isContextProvider,
+  pushContextProvider,
+  invalidateContextProvider,
+  findCurrentUnmaskedContext,
+};
