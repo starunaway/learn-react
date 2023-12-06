@@ -2,6 +2,8 @@ import {
   COMMENT_NODE,
   DOCUMENT_FRAGMENT_NODE,
   DOCUMENT_NODE,
+  ELEMENT_NODE,
+  TEXT_NODE,
 } from '@/react-dom-bindings/HTMLNodeType';
 import { FiberRoot } from './ReactInternalTypes';
 import { getChildNamespace } from '@/shared/DOMNamespaces';
@@ -10,7 +12,31 @@ export type Container =
   | (Document & { _reactRootContainer?: FiberRoot; [key: string]: any })
   | (DocumentFragment & { _reactRootContainer?: FiberRoot; [key: string]: any });
 
+export type Props = {
+  autoFocus?: boolean;
+  children?: any;
+  disabled?: boolean;
+  hidden?: boolean;
+  suppressHydrationWarning?: boolean;
+  dangerouslySetInnerHTML?: any;
+  style?: { display?: string; [key: string]: any };
+  bottom?: null | number;
+  left?: null | number;
+  right?: null | number;
+  top?: null | number;
+  [key: string]: any;
+};
+export type Instance = Element;
+export type TextInstance = Text;
+export type SuspenseInstance = Comment & { _reactRetry?: () => void; [key: string]: any };
+export type HydratableInstance = Instance | TextInstance | SuspenseInstance;
+
 export const supportsMicrotasks = true;
+
+const SUSPENSE_START_DATA = '$';
+const SUSPENSE_END_DATA = '/$';
+const SUSPENSE_PENDING_START_DATA = '$?';
+const SUSPENSE_FALLBACK_START_DATA = '$!';
 
 type SelectionInformation = {
   focusedElem: null | HTMLElement;
@@ -109,4 +135,45 @@ export function getChildHostContext(
     throw Error('ReactFiberHostConfig.getChildHostContext: parentNamespace is not string');
   }
   return getChildNamespace(parentNamespace as string, type);
+}
+function getNextHydratable(node: ChildNode | null) {
+  // Skip non-hydratable nodes.
+  for (; node != null; node = node.nextSibling) {
+    const nodeType = node.nodeType;
+    if (nodeType === ELEMENT_NODE || nodeType === TEXT_NODE) {
+      break;
+    }
+    if (nodeType === COMMENT_NODE) {
+      const nodeData = (node as any).data;
+      if (
+        nodeData === SUSPENSE_START_DATA ||
+        nodeData === SUSPENSE_FALLBACK_START_DATA ||
+        nodeData === SUSPENSE_PENDING_START_DATA
+      ) {
+        break;
+      }
+      if (nodeData === SUSPENSE_END_DATA) {
+        return null;
+      }
+    }
+  }
+  return node as any;
+}
+
+export function getFirstHydratableChildWithinContainer(
+  parentContainer: Container
+): null | HydratableInstance {
+  return getNextHydratable(parentContainer.firstChild);
+}
+
+export function shouldSetTextContent(type: string, props: Props): boolean {
+  return (
+    type === 'textarea' ||
+    type === 'noscript' ||
+    typeof props.children === 'string' ||
+    typeof props.children === 'number' ||
+    (typeof props.dangerouslySetInnerHTML === 'object' &&
+      props.dangerouslySetInnerHTML !== null &&
+      props.dangerouslySetInnerHTML.__html != null)
+  );
 }

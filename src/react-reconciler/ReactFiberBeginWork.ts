@@ -9,6 +9,7 @@ import {
   invalidateContextProvider,
 } from './ReactFiberContext';
 import {
+  ContentReset,
   DidCapture,
   ForceClientRender,
   ForceUpdateForLegacySuspense,
@@ -16,6 +17,7 @@ import {
   NoFlags,
   PerformedWork,
   Placement,
+  Ref,
 } from './ReactFiberFlags';
 import { Lanes, NoLanes, includesSomeLane } from './ReactFiberLane';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
@@ -53,13 +55,19 @@ import {
 
 import { resolveDefaultProps } from './ReactFiberLazyComponent';
 import { RootState } from './ReactFiberRoot';
-import { supportsHydration } from './ReactFiberHostConfig';
+import { shouldSetTextContent, supportsHydration } from './ReactFiberHostConfig';
 import { UpdateQueue } from './ReactFiberClassUpdateQueue';
 import { ReactNodeList } from '@/shared/ReactTypes';
-import { CapturedValue } from './ReactCapturedValue';
+import { CapturedValue, createCapturedValueAtFiber } from './ReactCapturedValue';
 import { pushHostContainer, pushHostContext } from './ReactFiberHostContext';
 import { pushRootTransition } from './ReactFiberTransition';
-import { getIsHydrating, resetHydrationState } from './ReactFiberHydrationContext';
+import {
+  enterHydrationState,
+  getIsHydrating,
+  queueHydrationError,
+  resetHydrationState,
+  tryToClaimNextHydratableInstance,
+} from './ReactFiberHydrationContext';
 import { ConcurrentMode, NoMode } from './ReactTypeOfMode';
 import { prepareToReadContext } from './ReactFiberNewContext';
 import { bailoutHooks, checkDidRenderIdHook, renderWithHooks } from './ReactFiberHooks';
@@ -67,8 +75,10 @@ import {
   processUpdateQueue,
   cloneUpdateQueue,
   initializeUpdateQueue,
-  enqueueCapturedUpdate,
+  // enqueueCapturedUpdate,
 } from './ReactFiberClassUpdateQueue';
+import { pushMaterializedTreeId } from './ReactFiberTreeContext';
+import { markSkippedUpdateLanes } from './ReactFiberWorkLoop';
 const ReactCurrentOwner = ReactSharedInternals.ReactCurrentOwner;
 
 let didReceiveUpdate: boolean = false;
@@ -100,6 +110,28 @@ function checkScheduledUpdateOrContext(current: Fiber, renderLanes: Lanes): bool
   //   }
   // }
   return false;
+}
+
+function forceUnmountCurrentAndReconcile(
+  current: Fiber,
+  workInProgress: Fiber,
+  nextChildren: any,
+  renderLanes: Lanes
+) {
+  // This function is fork of reconcileChildren. It's used in cases where we
+  // want to reconcile without matching against the existing set. This has the
+  // effect of all current children being unmounted; even if the type and key
+  // are the same, the old child is unmounted and a new child is created.
+  //
+  // To do this, we're going to go through the reconcile algorithm twice. In
+  // the first pass, we schedule a deletion for all the current children by
+  // passing null.
+  workInProgress.child = reconcileChildFibers(workInProgress, current.child, null, renderLanes);
+  // In the second pass, we mount the new children. The trick here is that we
+  // pass null in place of where we usually pass the current child set. This has
+  // the effect of remounting all children regardless of whether their
+  // identities match.
+  workInProgress.child = reconcileChildFibers(workInProgress, null, nextChildren, renderLanes);
 }
 
 export function reconcileChildren(
@@ -818,6 +850,17 @@ function mountIndeterminateComponent(
   }
 }
 
+function markRef(current: Fiber | null, workInProgress: Fiber) {
+  const ref = workInProgress.ref;
+  if ((current === null && ref !== null) || (current !== null && current.ref !== ref)) {
+    // Schedule a Ref effect
+    workInProgress.flags |= Ref;
+    // if (enableSuspenseLayoutEffectSemantics) {
+    //   workInProgress.flags |= RefStatic;
+    // }
+  }
+}
+
 function pushHostRootContext(workInProgress: Fiber) {
   const root = workInProgress.stateNode as FiberRoot;
   if (root.pendingContext) {
@@ -1301,7 +1344,7 @@ function updateHostComponent(current: Fiber | null, workInProgress: Fiber, rende
   return workInProgress.child;
 }
 
-function updateHostText(current: null | Fiber, workInProgress) {
+function updateHostText(current: null | Fiber, workInProgress: Fiber) {
   if (current === null) {
     tryToClaimNextHydratableInstance(workInProgress);
   }

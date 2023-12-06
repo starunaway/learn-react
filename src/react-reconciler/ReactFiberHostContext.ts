@@ -1,4 +1,4 @@
-import { HostContext, getRootHostContext } from './ReactFiberHostConfig';
+import { HostContext, getChildHostContext, getRootHostContext } from './ReactFiberHostConfig';
 import { StackCursor, createCursor, pop, push } from './ReactFiberStack';
 import { Container, Fiber } from './ReactInternalTypes';
 

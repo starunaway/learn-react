@@ -1,4 +1,4 @@
-import { StackCursor, createCursor, push } from './ReactFiberStack';
+import { StackCursor, createCursor, pop, push } from './ReactFiberStack';
 import { Fiber } from './ReactInternalTypes';
 
 export const emptyContextObject = {};
@@ -175,4 +175,88 @@ export function pushContextProvider(workInProgress: Fiber): boolean {
   }
 }
 
+export function processChildContext(fiber: Fiber, type: any, parentContext: Object): Object {
+  if (disableLegacyContext) {
+    return parentContext;
+  } else {
+    const instance = fiber.stateNode;
+    const childContextTypes = type.childContextTypes;
+
+    // TODO (bvaughn) Replace this behavior with an invariant() in the future.
+    // It has only been added in Fiber to match the (unintentional) behavior in Stack.
+    if (typeof instance.getChildContext !== 'function') {
+      // if (__DEV__) {
+      //   const componentName = getComponentNameFromFiber(fiber) || 'Unknown';
+
+      //   if (!warnedAboutMissingGetChildContext[componentName]) {
+      //     warnedAboutMissingGetChildContext[componentName] = true;
+      //     console.error(
+      //       '%s.childContextTypes is specified but there is no getChildContext() method ' +
+      //         'on the instance. You can either define getChildContext() on %s or remove ' +
+      //         'childContextTypes from it.',
+      //       componentName,
+      //       componentName,
+      //     );
+      //   }
+      // }
+      return parentContext;
+    }
+
+    const childContext = instance.getChildContext();
+    for (const contextKey in childContext) {
+      if (!(contextKey in childContextTypes)) {
+        console.error('ReactFiberContext processChildContext Error');
+        // throw new Error(
+        //   `${getComponentNameFromFiber(fiber) ||
+        //     'Unknown'}.getChildContext(): key "${contextKey}" is not defined in childContextTypes.`,
+        // );
+      }
+    }
+    // if (__DEV__) {
+    //   const name = getComponentNameFromFiber(fiber) || 'Unknown';
+    //   checkPropTypes(childContextTypes, childContext, 'child context', name);
+    // }
+
+    return { ...parentContext, ...childContext };
+  }
+}
+
 export { hasContextChanged as hasLegacyContextChanged, pushTopLevelContextObject };
+
+export function invalidateContextProvider(
+  workInProgress: Fiber,
+  type: any,
+  didChange: boolean
+): void {
+  if (disableLegacyContext) {
+    return;
+  } else {
+    const instance = workInProgress.stateNode;
+
+    if (!instance) {
+      throw new Error(
+        'Expected to have an instance by this point. ' +
+          'This error is likely caused by a bug in React. Please file an issue.'
+      );
+    }
+
+    if (didChange) {
+      // Merge parent and own context.
+      // Skip this if we're not updating due to sCU.
+      // This avoids unnecessarily recomputing memoized values.
+      const mergedContext = processChildContext(workInProgress, type, previousContext);
+      instance.__reactInternalMemoizedMergedChildContext = mergedContext;
+
+      // Replace the old (or empty) context with the new one.
+      // It is important to unwind the context in the reverse order.
+      pop(didPerformWorkStackCursor, workInProgress);
+      pop(contextStackCursor, workInProgress);
+      // Now push the new context and mark that it has changed.
+      push(contextStackCursor, mergedContext, workInProgress);
+      push(didPerformWorkStackCursor, didChange, workInProgress);
+    } else {
+      pop(didPerformWorkStackCursor, workInProgress);
+      push(didPerformWorkStackCursor, didChange, workInProgress);
+    }
+  }
+}
