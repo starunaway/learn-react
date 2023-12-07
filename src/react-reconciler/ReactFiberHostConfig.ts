@@ -7,6 +7,8 @@ import {
 } from '@/react-dom-bindings/HTMLNodeType';
 import { FiberRoot } from './ReactInternalTypes';
 import { getChildNamespace } from '@/shared/DOMNamespaces';
+import { updateProperties } from '@/react-dom/ReactDOMComponent';
+import { updateFiberProps } from '@/react-dom/ReactDOMComponentTree';
 export type Container =
   | (Element & { _reactRootContainer?: FiberRoot; [key: string]: any })
   | (Document & { _reactRootContainer?: FiberRoot; [key: string]: any })
@@ -26,8 +28,8 @@ export type Props = {
   top?: null | number;
   [key: string]: any;
 };
-export type Instance = Element;
-export type TextInstance = Text;
+export type Instance = Element & { [key: string]: any };
+export type TextInstance = Text & { [key: string]: any };
 export type SuspenseInstance = Comment & { _reactRetry?: () => void; [key: string]: any };
 export type HydratableInstance = Instance | TextInstance | SuspenseInstance;
 
@@ -87,6 +89,9 @@ type HostContextDev = {
 };
 type HostContextProd = string;
 export type HostContext = HostContextDev | HostContextProd;
+
+export type UpdatePayload = Array<any>;
+
 export function getRootHostContext(rootContainerInstance: Container): HostContext {
   let type;
   let namespace;
@@ -176,4 +181,152 @@ export function shouldSetTextContent(type: string, props: Props): boolean {
       props.dangerouslySetInnerHTML !== null &&
       props.dangerouslySetInnerHTML.__html != null)
   );
+}
+
+export function getPublicInstance(instance: Instance): Instance {
+  return instance;
+}
+
+export function commitMount(
+  domElement: Instance,
+  type: string,
+  newProps: Props,
+  internalInstanceHandle: Object
+): void {
+  // Despite the naming that might imply otherwise, this method only
+  // fires if there is an `Update` effect scheduled during mounting.
+  // This happens if `finalizeInitialChildren` returns `true` (which it
+  // does to implement the `autoFocus` attribute on the client). But
+  // there are also other cases when this might happen (such as patching
+  // up text content during hydration mismatch). So we'll check this again.
+  switch (type) {
+    case 'button':
+    case 'input':
+    case 'select':
+    case 'textarea':
+      if (newProps.autoFocus) {
+        (
+          domElement as
+            | HTMLButtonElement
+            | HTMLInputElement
+            | HTMLSelectElement
+            | HTMLTextAreaElement
+        ).focus();
+      }
+      return;
+    case 'img': {
+      if ((newProps as any).src) {
+        (domElement as any as HTMLImageElement).src = newProps.src;
+      }
+      return;
+    }
+  }
+}
+
+export const supportsMutation = true;
+
+export function commitUpdate(
+  domElement: Instance,
+  updatePayload: Array<any>,
+  type: string,
+  oldProps: Props,
+  newProps: Props,
+  internalInstanceHandle: Object
+): void {
+  // Apply the diff to the DOM node.
+  updateProperties(domElement, updatePayload, type, oldProps, newProps);
+  // Update the props handle so that we know which props are the ones with
+  // with current event handlers.
+  updateFiberProps(domElement, newProps);
+}
+
+export function resetTextContent(domElement: Instance): void {
+  // todo 暂时不看
+  // setTextContent(domElement, '');
+}
+
+export function commitTextUpdate(
+  textInstance: TextInstance,
+  oldText: string,
+  newText: string
+): void {
+  textInstance.nodeValue = newText;
+}
+
+export function appendChild(parentInstance: Instance, child: Instance | TextInstance): void {
+  parentInstance.appendChild(child);
+}
+
+export function appendChildToContainer(container: Container, child: Instance | TextInstance): void {
+  let parentNode;
+  if (container.nodeType === COMMENT_NODE) {
+    parentNode = container.parentNode;
+    parentNode?.insertBefore(child, container);
+  } else {
+    parentNode = container;
+    parentNode.appendChild(child);
+  }
+  // This container might be used for a portal.
+  // If something inside a portal is clicked, that click should bubble
+  // through the React tree. However, on Mobile Safari the click would
+  // never bubble through the *DOM* tree unless an ancestor with onclick
+  // event exists. So we wouldn't see it and dispatch it.
+  // This is why we ensure that non React root containers have inline onclick
+  // defined.
+  // https://github.com/facebook/react/issues/11918
+  const reactRootContainer = container._reactRootContainer;
+  if (
+    (reactRootContainer === null || reactRootContainer === undefined) &&
+    (parentNode as HTMLElement)?.onclick === null
+  ) {
+    // TODO: This cast may not be sound for SVG, MathML or custom elements.
+    //  todo 暂时不看
+    // trapClickOnNonInteractiveElement(parentNode as HTMLElement);
+  }
+}
+
+export function commitHydratedContainer(container: Container): void {
+  // Retry if any event replaying was blocked on this.
+  // retryIfBlockedOn(container);
+}
+
+export function insertBefore(
+  parentInstance: Instance,
+  child: Instance | TextInstance,
+  beforeChild: Instance | TextInstance | SuspenseInstance
+): void {
+  parentInstance?.insertBefore(child, beforeChild);
+}
+
+export function insertInContainerBefore(
+  container: Container,
+  child: Instance | TextInstance,
+  beforeChild: Instance | TextInstance | SuspenseInstance
+): void {
+  if (container.nodeType === COMMENT_NODE) {
+    container.parentNode?.insertBefore(child, beforeChild);
+  } else {
+    container.insertBefore(child, beforeChild);
+  }
+}
+
+// dom 下为 false
+export const supportsPersistence = false;
+
+export function removeChild(
+  parentInstance: Instance,
+  child: Instance | TextInstance | SuspenseInstance
+): void {
+  parentInstance.removeChild(child);
+}
+
+export function removeChildFromContainer(
+  container: Container,
+  child: Instance | TextInstance | SuspenseInstance
+): void {
+  if (container.nodeType === COMMENT_NODE) {
+    container.parentNode?.removeChild(child);
+  } else {
+    container.removeChild(child);
+  }
 }
