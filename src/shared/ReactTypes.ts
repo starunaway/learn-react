@@ -115,3 +115,16 @@ export type OffscreenMode = 'hidden' | 'unstable-defer-without-hiding' | 'visibl
 export type StartTransitionOptions = {
   name?: string;
 };
+
+export type ReactScopeQuery = (
+  type: string,
+  props: { [key: string]: any },
+  instance: any
+) => boolean;
+
+export type ReactScopeInstance = {
+  DO_NOT_USE_queryAllNodes: (q: ReactScopeQuery) => null | Array<Object>;
+  DO_NOT_USE_queryFirstNode: (q: ReactScopeQuery) => null | Object;
+  containsNode: (o: Object) => boolean;
+  getChildContextValues: <T>(context: ReactContext<T>) => Array<T>;
+};

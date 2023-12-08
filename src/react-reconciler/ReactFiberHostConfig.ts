@@ -5,10 +5,19 @@ import {
   ELEMENT_NODE,
   TEXT_NODE,
 } from '@/react-dom-bindings/HTMLNodeType';
-import { FiberRoot } from './ReactInternalTypes';
+import { Fiber, FiberRoot } from './ReactInternalTypes';
 import { getChildNamespace } from '@/shared/DOMNamespaces';
-import { updateProperties } from '@/react-dom/ReactDOMComponent';
-import { updateFiberProps } from '@/react-dom/ReactDOMComponentTree';
+import {
+  checkForUnmatchedText,
+  createElement,
+  createTextNode,
+  diffHydratedText,
+  diffProperties,
+  setInitialProperties,
+  updateProperties,
+} from '@/react-dom/ReactDOMComponent';
+import { precacheFiberNode, updateFiberProps } from '@/react-dom/ReactDOMComponentTree';
+import { ConcurrentMode, NoMode } from './ReactTypeOfMode';
 export type Container =
   | (Element & { _reactRootContainer?: FiberRoot; [key: string]: any })
   | (Document & { _reactRootContainer?: FiberRoot; [key: string]: any })
@@ -329,4 +338,192 @@ export function removeChildFromContainer(
   } else {
     container.removeChild(child);
   }
+}
+
+export function hydrateInstance(
+  instance: Instance,
+  type: string,
+  props: Props,
+  rootContainerInstance: Container,
+  hostContext: HostContext,
+  internalInstanceHandle: Object,
+  shouldWarnDev: boolean
+): null | Array<any> {
+  precacheFiberNode(internalInstanceHandle as Fiber, instance);
+  // TODO: Possibly defer this until the commit phase where all the events
+  // get attached.
+  updateFiberProps(instance, props);
+  let parentNamespace: string;
+  // if (__DEV__) {
+  //   const hostContextDev = ((hostContext: any): HostContextDev);
+  //   parentNamespace = hostContextDev.namespace;
+  // } else {
+  parentNamespace = hostContext as string;
+  // }
+
+  // TODO: Temporary hack to check if we're in a concurrent root. We can delete
+  // when the legacy root API is removed.
+  const isConcurrentMode = ((internalInstanceHandle as Fiber).mode & ConcurrentMode) !== NoMode;
+
+  // 这个方法暂时不看，和 ssr 相关
+  // return diffHydratedProperties(
+  //   instance,
+  //   type,
+  //   props,
+  //   parentNamespace,
+  //   rootContainerInstance,
+  //   isConcurrentMode,
+  //   shouldWarnDev
+  // );
+  return null;
+}
+
+export function hydrateTextInstance(
+  textInstance: TextInstance,
+  text: string,
+  internalInstanceHandle: Object,
+  shouldWarnDev: boolean
+): boolean {
+  precacheFiberNode(internalInstanceHandle as Fiber, textInstance);
+
+  // TODO: Temporary hack to check if we're in a concurrent root. We can delete
+  // when the legacy root API is removed.
+  const isConcurrentMode = ((internalInstanceHandle as Fiber).mode & ConcurrentMode) !== NoMode;
+
+  return diffHydratedText(textInstance, text, isConcurrentMode);
+}
+
+export function didNotMatchHydratedContainerTextInstance(
+  parentContainer: Container,
+  textInstance: TextInstance,
+  text: string,
+  isConcurrentMode: boolean
+) {
+  const shouldWarnDev = true;
+  checkForUnmatchedText(textInstance.nodeValue!, text, isConcurrentMode, shouldWarnDev);
+}
+
+export function didNotMatchHydratedTextInstance(
+  parentType: string,
+  parentProps: Props,
+  parentInstance: Instance,
+  textInstance: TextInstance,
+  text: string,
+  isConcurrentMode: boolean
+) {
+  // if (parentProps[SUPPRESS_HYDRATION_WARNING] !== true) {
+  //   const shouldWarnDev = true;
+  //   checkForUnmatchedText(
+  //     textInstance.nodeValue,
+  //     text,
+  //     isConcurrentMode,
+  //     shouldWarnDev,
+  //   );
+  // }
+}
+
+export type Type = string;
+
+export function appendInitialChild(parentInstance: Instance, child: Instance | TextInstance): void {
+  parentInstance.appendChild(child);
+}
+
+export function prepareUpdate(
+  domElement: Instance,
+  type: string,
+  oldProps: Props,
+  newProps: Props,
+  rootContainerInstance: Container,
+  hostContext: HostContext
+): null | Array<any> {
+  // if (__DEV__) {
+  //   const hostContextDev = ((hostContext: any): HostContextDev);
+  //   if (
+  //     typeof newProps.children !== typeof oldProps.children &&
+  //     (typeof newProps.children === 'string' ||
+  //       typeof newProps.children === 'number')
+  //   ) {
+  //     const string = '' + newProps.children;
+  //     const ownAncestorInfo = updatedAncestorInfo(
+  //       hostContextDev.ancestorInfo,
+  //       type,
+  //     );
+  //     validateDOMNesting(null, string, ownAncestorInfo);
+  //   }
+  // }
+  return diffProperties(domElement, type, oldProps, newProps, rootContainerInstance);
+}
+
+export function createInstance(
+  type: string,
+  props: Props,
+  rootContainerInstance: Container,
+  hostContext: HostContext,
+  internalInstanceHandle: Object
+): Instance {
+  let parentNamespace: string;
+  // if (__DEV__) {
+  //   // TODO: take namespace into account when validating.
+  //   const hostContextDev = ((hostContext: any): HostContextDev);
+  //   validateDOMNesting(type, null, hostContextDev.ancestorInfo);
+  //   if (
+  //     typeof props.children === 'string' ||
+  //     typeof props.children === 'number'
+  //   ) {
+  //     const string = '' + props.children;
+  //     const ownAncestorInfo = updatedAncestorInfo(
+  //       hostContextDev.ancestorInfo,
+  //       type,
+  //     );
+  //     validateDOMNesting(null, string, ownAncestorInfo);
+  //   }
+  //   parentNamespace = hostContextDev.namespace;
+  // } else {
+  parentNamespace = hostContext as HostContextProd;
+  // }
+  const domElement: Instance = createElement(
+    type,
+    props,
+    rootContainerInstance,
+    parentNamespace
+  ) as unknown as Instance;
+  precacheFiberNode(internalInstanceHandle as Fiber, domElement);
+  updateFiberProps(domElement, props);
+  return domElement;
+}
+
+export function finalizeInitialChildren(
+  domElement: Instance,
+  type: string,
+  props: Props,
+  rootContainerInstance: Container,
+  hostContext: HostContext
+): boolean {
+  setInitialProperties(domElement, type, props, rootContainerInstance);
+  switch (type) {
+    case 'button':
+    case 'input':
+    case 'select':
+    case 'textarea':
+      return !!props.autoFocus;
+    case 'img':
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function createTextInstance(
+  text: string,
+  rootContainerInstance: Container,
+  hostContext: HostContext,
+  internalInstanceHandle: Object
+): TextInstance {
+  // if (__DEV__) {
+  //   const hostContextDev = ((hostContext: any): HostContextDev);
+  //   validateDOMNesting(null, text, hostContextDev.ancestorInfo);
+  // }
+  const textNode: TextInstance = createTextNode(text, rootContainerInstance);
+  precacheFiberNode(internalInstanceHandle as Fiber, textNode);
+  return textNode;
 }

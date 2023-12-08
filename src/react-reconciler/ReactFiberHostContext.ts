@@ -78,9 +78,14 @@ function popHostContainer(fiber: Fiber) {
   pop(rootInstanceStackCursor, fiber);
 }
 
+function getRootHostContainer(): Container {
+  const rootInstance = requiredContext(rootInstanceStackCursor.current);
+  return rootInstance;
+}
+
 export {
   getHostContext,
-  // getRootHostContainer,
+  getRootHostContainer,
   popHostContainer,
   popHostContext,
   pushHostContainer,
