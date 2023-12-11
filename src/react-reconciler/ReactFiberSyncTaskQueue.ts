@@ -1,4 +1,9 @@
-import { SchedulerCallback } from './Scheduler';
+import {
+  DiscreteEventPriority,
+  getCurrentUpdatePriority,
+  setCurrentUpdatePriority,
+} from './ReactEventPriorities';
+import { ImmediatePriority, SchedulerCallback, scheduleCallback } from './Scheduler';
 
 let includesLegacySyncCallbacks: boolean = false;
 let syncQueue: Array<SchedulerCallback> | null = null;
@@ -33,6 +38,37 @@ export function flushSyncCallbacksOnlyInLegacyMode() {
 }
 
 export function flushSyncCallbacks() {
-  // todo 首次渲染流程，暂时用不到这个函数，先 hold，后续补充
-  return;
+  if (!isFlushingSyncQueue && syncQueue !== null) {
+    // Prevent re-entrance.
+    isFlushingSyncQueue = true;
+    let i = 0;
+    const previousUpdatePriority = getCurrentUpdatePriority();
+    try {
+      const isSync = true;
+      const queue = syncQueue;
+      // TODO: Is this necessary anymore? The only user code that runs in this
+      // queue is in the render or commit phases.
+      setCurrentUpdatePriority(DiscreteEventPriority);
+      for (; i < queue.length; i++) {
+        let callback: SchedulerCallback | null = queue[i];
+        do {
+          callback = callback(isSync);
+        } while (callback !== null);
+      }
+      syncQueue = null;
+      includesLegacySyncCallbacks = false;
+    } catch (error) {
+      // If something throws, leave the remaining callbacks on the queue.
+      if (syncQueue !== null) {
+        syncQueue = syncQueue.slice(i + 1);
+      }
+      // Resume flushing in the next tick
+      scheduleCallback(ImmediatePriority, flushSyncCallbacks);
+      throw error;
+    } finally {
+      setCurrentUpdatePriority(previousUpdatePriority);
+      isFlushingSyncQueue = false;
+    }
+  }
+  return null;
 }

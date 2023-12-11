@@ -1,6 +1,8 @@
 // The deepest Fiber on the stack involved in a hydration context.
 
 import { CapturedValue } from './ReactCapturedValue';
+import { createFiberFromHostInstanceForDeletion } from './ReactFiber';
+import { ChildDeletion } from './ReactFiberFlags';
 import {
   Container,
   HostContext,
@@ -10,13 +12,16 @@ import {
   didNotMatchHydratedContainerTextInstance,
   didNotMatchHydratedTextInstance,
   getFirstHydratableChildWithinContainer,
+  getNextHydratableSibling,
   hydrateInstance,
   hydrateTextInstance,
+  shouldDeleteUnhydratedTailInstances,
+  shouldSetTextContent,
 } from './ReactFiberHostConfig';
 import { queueRecoverableErrors } from './ReactFiberWorkLoop';
 import { Fiber } from './ReactInternalTypes';
 import { ConcurrentMode, NoMode } from './ReactTypeOfMode';
-import { HostComponent, HostRoot } from './ReactWorkTags';
+import { HostComponent, HostRoot, SuspenseComponent } from './ReactWorkTags';
 let hydrationErrors: Array<CapturedValue<any>> | null = null;
 let didSuspendOrErrorDEV: boolean = false;
 
@@ -161,6 +166,21 @@ function tryToClaimNextHydratableInstance(fiber: Fiber): void {
   // }
 }
 
+function deleteHydratableInstance(returnFiber: Fiber, instance: HydratableInstance) {
+  // warnUnhydratedInstance(returnFiber, instance);
+  const childToDelete = createFiberFromHostInstanceForDeletion();
+  childToDelete.stateNode = instance;
+  childToDelete.return = returnFiber;
+
+  const deletions = returnFiber.deletions;
+  if (deletions === null) {
+    returnFiber.deletions = [childToDelete];
+    returnFiber.flags |= ChildDeletion;
+  } else {
+    deletions.push(childToDelete);
+  }
+}
+
 function prepareToHydrateHostInstance(
   fiber: Fiber,
   rootContainerInstance: Container,
@@ -203,6 +223,19 @@ export function upgradeHydrationErrorsToRecoverable(): void {
   }
 }
 
+function popToNextHostParent(fiber: Fiber): void {
+  let parent = fiber.return;
+  while (
+    parent !== null &&
+    parent.tag !== HostComponent &&
+    parent.tag !== HostRoot &&
+    parent.tag !== SuspenseComponent
+  ) {
+    parent = parent.return;
+  }
+  hydrationParentFiber = parent;
+}
+
 function popHydrationState(fiber: Fiber): boolean {
   if (!supportsHydration) {
     return false;
@@ -233,25 +266,27 @@ function popHydrationState(fiber: Fiber): boolean {
   ) {
     let nextInstance = nextHydratableInstance;
     if (nextInstance) {
-      if (shouldClientRenderOnMismatch(fiber)) {
-        warnIfUnhydratedTailNodes(fiber);
-        throwOnHydrationMismatch(fiber);
-      } else {
-        while (nextInstance) {
-          deleteHydratableInstance(fiber, nextInstance);
-          nextInstance = getNextHydratableSibling(nextInstance);
-        }
+      // if (shouldClientRenderOnMismatch(fiber)) {
+      //   warnIfUnhydratedTailNodes(fiber);
+      //   throwOnHydrationMismatch(fiber);
+      // } else {
+      while (nextInstance) {
+        deleteHydratableInstance(fiber, nextInstance);
+        nextInstance = getNextHydratableSibling(nextInstance);
       }
+      // }
     }
   }
   popToNextHostParent(fiber);
-  if (fiber.tag === SuspenseComponent) {
-    nextHydratableInstance = skipPastDehydratedSuspenseInstance(fiber);
-  } else {
-    nextHydratableInstance = hydrationParentFiber
-      ? getNextHydratableSibling(fiber.stateNode)
-      : null;
-  }
+  //  todo 和 ssr 相关的，先不看
+  nextHydratableInstance = null;
+  // if (fiber.tag === SuspenseComponent) {
+  //   nextHydratableInstance = skipPastDehydratedSuspenseInstance(fiber);
+  // } else {
+  // nextHydratableInstance = hydrationParentFiber
+  //   ? getNextHydratableSibling(fiber.stateNode)
+  //   : null;
+  // }
   return true;
 }
 

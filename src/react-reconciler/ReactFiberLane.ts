@@ -6,6 +6,8 @@ export type Lanes = number;
 export type Lane = number;
 export type LaneMap<T> = Array<T>;
 
+export const TotalLanes = 31;
+
 // 和更新优先级相关，只在 concurrent 模式下生效
 // 当前 NoLane 就可以了
 export const NoLanes: Lanes = /*                        */ 0b0000000000000000000000000000000;
@@ -61,6 +63,16 @@ export function getHighestPriorityLane(lanes: Lanes): Lane {
 // todo lane 模型后续再看
 function laneToIndex(lane: Lane) {
   return 31 - Math.clz32(lane);
+}
+
+export function createLaneMap<T>(initial: T): LaneMap<T> {
+  // Intentionally pushing one by one.
+  // https://v8.dev/blog/elements-kinds#avoid-creating-holes
+  const laneMap = [];
+  for (let i = 0; i < TotalLanes; i++) {
+    laneMap.push(initial);
+  }
+  return laneMap;
 }
 
 export function includesBlockingLane(root: FiberRoot, lanes: Lanes) {
@@ -135,132 +147,122 @@ export function includesNonIdleWork(lanes: Lanes) {
 }
 
 export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
-  // todo 暂时不看和优先级有关的逻辑
-  return NoLanes;
-  /** 
-   * 
-  {
-    // Early bailout if there's no pending work left.
-    const pendingLanes = root.pendingLanes;
-    if (pendingLanes === NoLanes) {
-      return NoLanes;
-    }
-
-    let nextLanes = NoLanes;
-
-    const suspendedLanes = root.suspendedLanes;
-    const pingedLanes = root.pingedLanes;
-
-    // Do not work on any idle work until all the non-idle work has finished,
-    // even if the work is suspended.
-    const nonIdlePendingLanes = pendingLanes & NonIdleLanes;
-    if (nonIdlePendingLanes !== NoLanes) {
-      const nonIdleUnblockedLanes = nonIdlePendingLanes & ~suspendedLanes;
-      if (nonIdleUnblockedLanes !== NoLanes) {
-        nextLanes = getHighestPriorityLanes(nonIdleUnblockedLanes);
-      } else {
-        const nonIdlePingedLanes = nonIdlePendingLanes & pingedLanes;
-        if (nonIdlePingedLanes !== NoLanes) {
-          nextLanes = getHighestPriorityLanes(nonIdlePingedLanes);
-        }
-      }
-    } else {
-      // The only remaining work is Idle.
-      const unblockedLanes = pendingLanes & ~suspendedLanes;
-      if (unblockedLanes !== NoLanes) {
-        nextLanes = getHighestPriorityLanes(unblockedLanes);
-      } else {
-        if (pingedLanes !== NoLanes) {
-          nextLanes = getHighestPriorityLanes(pingedLanes);
-        }
-      }
-    }
-
-    if (nextLanes === NoLanes) {
-      // This should only be reachable if we're suspended
-      // TODO: Consider warning in this path if a fallback timer is not scheduled.
-      return NoLanes;
-    }
-
-    // If we're already in the middle of a render, switching lanes will interrupt
-    // it and we'll lose our progress. We should only do this if the new lanes are
-    // higher priority.
-    if (
-      wipLanes !== NoLanes &&
-      wipLanes !== nextLanes &&
-      // If we already suspended with a delay, then interrupting is fine. Don't
-      // bother waiting until the root is complete.
-      (wipLanes & suspendedLanes) === NoLanes
-    ) {
-      const nextLane = getHighestPriorityLane(nextLanes);
-      const wipLane = getHighestPriorityLane(wipLanes);
-      if (
-        // Tests whether the next lane is equal or lower priority than the wip
-        // one. This works because the bits decrease in priority as you go left.
-        nextLane >= wipLane ||
-        // Default priority updates should not interrupt transition updates. The
-        // only difference between default updates and transition updates is that
-        // default updates do not support refresh transitions.
-        (nextLane === DefaultLane && (wipLane & TransitionLanes) !== NoLanes)
-      ) {
-        // Keep working on the existing in-progress tree. Do not interrupt.
-        return wipLanes;
-      }
-    }
-
-    if (
-      allowConcurrentByDefault &&
-      (root.current.mode & ConcurrentUpdatesByDefaultMode) !== NoMode
-    ) {
-      // Do nothing, use the lanes as they were assigned.
-    } else if ((nextLanes & InputContinuousLane) !== NoLanes) {
-      // When updates are sync by default, we entangle continuous priority updates
-      // and default updates, so they render in the same batch. The only reason
-      // they use separate lanes is because continuous updates should interrupt
-      // transitions, but default updates should not.
-      nextLanes |= pendingLanes & DefaultLane;
-    }
-
-    // Check for entangled lanes and add them to the batch.
-    //
-    // A lane is said to be entangled with another when it's not allowed to render
-    // in a batch that does not also include the other lane. Typically we do this
-    // when multiple updates have the same source, and we only want to respond to
-    // the most recent event from that source.
-    //
-    // Note that we apply entanglements *after* checking for partial work above.
-    // This means that if a lane is entangled during an interleaved event while
-    // it's already rendering, we won't interrupt it. This is intentional, since
-    // entanglement is usually "best effort": we'll try our best to render the
-    // lanes in the same batch, but it's not worth throwing out partially
-    // completed work in order to do it.
-    // TODO: Reconsider this. The counter-argument is that the partial work
-    // represents an intermediate state, which we don't want to show to the user.
-    // And by spending extra time finishing it, we're increasing the amount of
-    // time it takes to show the final state, which is what they are actually
-    // waiting for.
-    //
-    // For those exceptions where entanglement is semantically important, like
-    // useMutableSource, we should ensure that there is no partial work at the
-    // time we apply the entanglement.
-    const entangledLanes = root.entangledLanes;
-    if (entangledLanes !== NoLanes) {
-      const entanglements = root.entanglements;
-      let lanes = nextLanes & entangledLanes;
-      while (lanes > 0) {
-        const index = pickArbitraryLaneIndex(lanes);
-        const lane = 1 << index;
-
-        nextLanes |= entanglements[index];
-
-        lanes &= ~lane;
-      }
-    }
-
-    return nextLanes;
+  // Early bailout if there's no pending work left.
+  const pendingLanes = root.pendingLanes;
+  if (pendingLanes === NoLanes) {
+    return NoLanes;
   }
 
-  */
+  let nextLanes = NoLanes;
+
+  const suspendedLanes = root.suspendedLanes;
+  const pingedLanes = root.pingedLanes;
+
+  // Do not work on any idle work until all the non-idle work has finished,
+  // even if the work is suspended.
+  const nonIdlePendingLanes = pendingLanes & NonIdleLanes;
+  if (nonIdlePendingLanes !== NoLanes) {
+    const nonIdleUnblockedLanes = nonIdlePendingLanes & ~suspendedLanes;
+    if (nonIdleUnblockedLanes !== NoLanes) {
+      nextLanes = getHighestPriorityLanes(nonIdleUnblockedLanes);
+    } else {
+      const nonIdlePingedLanes = nonIdlePendingLanes & pingedLanes;
+      if (nonIdlePingedLanes !== NoLanes) {
+        nextLanes = getHighestPriorityLanes(nonIdlePingedLanes);
+      }
+    }
+  } else {
+    // The only remaining work is Idle.
+    const unblockedLanes = pendingLanes & ~suspendedLanes;
+    if (unblockedLanes !== NoLanes) {
+      nextLanes = getHighestPriorityLanes(unblockedLanes);
+    } else {
+      if (pingedLanes !== NoLanes) {
+        nextLanes = getHighestPriorityLanes(pingedLanes);
+      }
+    }
+  }
+
+  if (nextLanes === NoLanes) {
+    // This should only be reachable if we're suspended
+    // TODO: Consider warning in this path if a fallback timer is not scheduled.
+    return NoLanes;
+  }
+
+  // If we're already in the middle of a render, switching lanes will interrupt
+  // it and we'll lose our progress. We should only do this if the new lanes are
+  // higher priority.
+  if (
+    wipLanes !== NoLanes &&
+    wipLanes !== nextLanes &&
+    // If we already suspended with a delay, then interrupting is fine. Don't
+    // bother waiting until the root is complete.
+    (wipLanes & suspendedLanes) === NoLanes
+  ) {
+    const nextLane = getHighestPriorityLane(nextLanes);
+    const wipLane = getHighestPriorityLane(wipLanes);
+    if (
+      // Tests whether the next lane is equal or lower priority than the wip
+      // one. This works because the bits decrease in priority as you go left.
+      nextLane >= wipLane ||
+      // Default priority updates should not interrupt transition updates. The
+      // only difference between default updates and transition updates is that
+      // default updates do not support refresh transitions.
+      (nextLane === DefaultLane && (wipLane & TransitionLanes) !== NoLanes)
+    ) {
+      // Keep working on the existing in-progress tree. Do not interrupt.
+      return wipLanes;
+    }
+  }
+
+  let allowConcurrentByDefault = false;
+  if (allowConcurrentByDefault && (root.current.mode & ConcurrentUpdatesByDefaultMode) !== NoMode) {
+    // Do nothing, use the lanes as they were assigned.
+  } else if ((nextLanes & InputContinuousLane) !== NoLanes) {
+    // When updates are sync by default, we entangle continuous priority updates
+    // and default updates, so they render in the same batch. The only reason
+    // they use separate lanes is because continuous updates should interrupt
+    // transitions, but default updates should not.
+    nextLanes |= pendingLanes & DefaultLane;
+  }
+
+  // Check for entangled lanes and add them to the batch.
+  //
+  // A lane is said to be entangled with another when it's not allowed to render
+  // in a batch that does not also include the other lane. Typically we do this
+  // when multiple updates have the same source, and we only want to respond to
+  // the most recent event from that source.
+  //
+  // Note that we apply entanglements *after* checking for partial work above.
+  // This means that if a lane is entangled during an interleaved event while
+  // it's already rendering, we won't interrupt it. This is intentional, since
+  // entanglement is usually "best effort": we'll try our best to render the
+  // lanes in the same batch, but it's not worth throwing out partially
+  // completed work in order to do it.
+  // TODO: Reconsider this. The counter-argument is that the partial work
+  // represents an intermediate state, which we don't want to show to the user.
+  // And by spending extra time finishing it, we're increasing the amount of
+  // time it takes to show the final state, which is what they are actually
+  // waiting for.
+  //
+  // For those exceptions where entanglement is semantically important, like
+  // useMutableSource, we should ensure that there is no partial work at the
+  // time we apply the entanglement.
+  const entangledLanes = root.entangledLanes;
+  if (entangledLanes !== NoLanes) {
+    const entanglements = root.entanglements;
+    let lanes = nextLanes & entangledLanes;
+    while (lanes > 0) {
+      const index = pickArbitraryLaneIndex(lanes);
+      const lane = 1 << index;
+
+      nextLanes |= entanglements[index];
+
+      lanes &= ~lane;
+    }
+  }
+
+  return nextLanes;
 }
 
 export function includesSomeLane(a: Lanes | Lane, b: Lanes | Lane) {
@@ -387,5 +389,61 @@ export function markRootEntangled(root: FiberRoot, entangledLanes: Lanes) {
       entanglements[index] |= entangledLanes;
     }
     lanes &= ~lane;
+  }
+}
+
+function getHighestPriorityLanes(lanes: Lanes | Lane): Lanes {
+  switch (getHighestPriorityLane(lanes)) {
+    case SyncLane:
+      return SyncLane;
+    case InputContinuousHydrationLane:
+      return InputContinuousHydrationLane;
+    case InputContinuousLane:
+      return InputContinuousLane;
+    case DefaultHydrationLane:
+      return DefaultHydrationLane;
+    case DefaultLane:
+      return DefaultLane;
+    case TransitionHydrationLane:
+      return TransitionHydrationLane;
+    case TransitionLane1:
+    case TransitionLane2:
+    case TransitionLane3:
+    case TransitionLane4:
+    case TransitionLane5:
+    case TransitionLane6:
+    case TransitionLane7:
+    case TransitionLane8:
+    case TransitionLane9:
+    case TransitionLane10:
+    case TransitionLane11:
+    case TransitionLane12:
+    case TransitionLane13:
+    case TransitionLane14:
+    case TransitionLane15:
+    case TransitionLane16:
+      return lanes & TransitionLanes;
+    case RetryLane1:
+    case RetryLane2:
+    case RetryLane3:
+    case RetryLane4:
+    case RetryLane5:
+      return lanes & RetryLanes;
+    // case SelectiveHydrationLane:
+    //   return SelectiveHydrationLane;
+    case IdleHydrationLane:
+      return IdleHydrationLane;
+    case IdleLane:
+      return IdleLane;
+    case OffscreenLane:
+      return OffscreenLane;
+    default:
+      // if (__DEV__) {
+      //   console.error(
+      //     'Should have found matching lanes. This is a bug in React.',
+      //   );
+      // }
+      // This shouldn't be reachable, but as a fallback, return the entire bitmask.
+      return lanes;
   }
 }

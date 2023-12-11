@@ -4,7 +4,7 @@ import {
   SuspenseInstance,
   TextInstance,
 } from '@/react-reconciler/ReactFiberHostConfig';
-import { Fiber } from '@/react-reconciler/ReactInternalTypes';
+import { Container, Fiber, FiberRoot } from '@/react-reconciler/ReactInternalTypes';
 import { ReactScopeInstance } from '@/shared/ReactTypes';
 
 const randomKey = Math.random().toString(36).slice(2);
@@ -21,6 +21,10 @@ export function updateFiberProps(
   props: Props
 ): void {
   node[internalPropsKey] = props;
+}
+
+export function markContainerAsRoot(hostRoot: FiberRoot, node: Container): void {
+  node[internalContainerInstanceKey as '_reactRootContainer'] = hostRoot;
 }
 
 export function detachDeletedInstance(node: Instance): void {

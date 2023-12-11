@@ -226,7 +226,7 @@ function workLoop(hasTimeRemaining: boolean, initialTime: number) {
 function unstable_scheduleCallback(
   priorityLevel: PriorityLevel,
   callback: Function | null,
-  options: Record<string | 'delay', any> | null
+  options?: Record<string | 'delay', any> | null
 ) {
   var currentTime = getCurrentTime();
 

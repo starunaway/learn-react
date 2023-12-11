@@ -66,6 +66,7 @@ import {
   finalizeInitialChildren,
   prepareUpdate,
   supportsMutation,
+  supportsPersistence,
 } from './ReactFiberHostConfig';
 
 let appendAllChildren: Function;
@@ -166,6 +167,249 @@ if (supportsMutation) {
     }
   };
 }
+//  else if (supportsPersistence) {
+//   // Persistent host tree mode
+
+//   appendAllChildren = function(
+//     parent: Instance,
+//     workInProgress: Fiber,
+//     needsVisibilityToggle: boolean,
+//     isHidden: boolean,
+//   ) {
+//     // We only have the top Fiber that was created but we need recurse down its
+//     // children to find all the terminal nodes.
+//     let node = workInProgress.child;
+//     while (node !== null) {
+//       // eslint-disable-next-line no-labels
+//       branches: if (node.tag === HostComponent) {
+//         let instance = node.stateNode;
+//         if (needsVisibilityToggle && isHidden) {
+//           // This child is inside a timed out tree. Hide it.
+//           const props = node.memoizedProps;
+//           const type = node.type;
+//           instance = cloneHiddenInstance(instance, type, props, node);
+//         }
+//         appendInitialChild(parent, instance);
+//       } else if (node.tag === HostText) {
+//         let instance = node.stateNode;
+//         if (needsVisibilityToggle && isHidden) {
+//           // This child is inside a timed out tree. Hide it.
+//           const text = node.memoizedProps;
+//           instance = cloneHiddenTextInstance(instance, text, node);
+//         }
+//         appendInitialChild(parent, instance);
+//       } else if (node.tag === HostPortal) {
+//         // If we have a portal child, then we don't want to traverse
+//         // down its children. Instead, we'll get insertions from each child in
+//         // the portal directly.
+//       }
+//       //  else if (
+//       //   node.tag === OffscreenComponent &&
+//       //   node.memoizedState !== null
+//       // ) {
+//       //   // The children in this boundary are hidden. Toggle their visibility
+//       //   // before appending.
+//       //   const child = node.child;
+//       //   if (child !== null) {
+//       //     child.return = node;
+//       //   }
+//       //   appendAllChildren(parent, node, true, true);
+//       // }
+//       else if (node.child !== null) {
+//         node.child.return = node;
+//         node = node.child;
+//         continue;
+//       }
+
+//       if (node === workInProgress) {
+//         return;
+//       }
+//       while (node.sibling === null) {
+//         if (node.return === null || node.return === workInProgress) {
+//           return;
+//         }
+//         node = node.return;
+//       }
+//       node.sibling.return = node.return;
+//       node = node.sibling;
+//     }
+//   };
+
+//   // An unfortunate fork of appendAllChildren because we have two different parent types.
+//   const appendAllChildrenToContainer = function(
+//     containerChildSet: ChildSet,
+//     workInProgress: Fiber,
+//     needsVisibilityToggle: boolean,
+//     isHidden: boolean,
+//   ) {
+//     // We only have the top Fiber that was created but we need recurse down its
+//     // children to find all the terminal nodes.
+//     let node = workInProgress.child;
+//     while (node !== null) {
+//       // eslint-disable-next-line no-labels
+//       branches: if (node.tag === HostComponent) {
+//         let instance = node.stateNode;
+//         if (needsVisibilityToggle && isHidden) {
+//           // This child is inside a timed out tree. Hide it.
+//           const props = node.memoizedProps;
+//           const type = node.type;
+//           instance = cloneHiddenInstance(instance, type, props, node);
+//         }
+//         appendChildToContainerChildSet(containerChildSet, instance);
+//       } else if (node.tag === HostText) {
+//         let instance = node.stateNode;
+//         if (needsVisibilityToggle && isHidden) {
+//           // This child is inside a timed out tree. Hide it.
+//           const text = node.memoizedProps;
+//           instance = cloneHiddenTextInstance(instance, text, node);
+//         }
+//         appendChildToContainerChildSet(containerChildSet, instance);
+//       } else if (node.tag === HostPortal) {
+//         // If we have a portal child, then we don't want to traverse
+//         // down its children. Instead, we'll get insertions from each child in
+//         // the portal directly.
+//       } else if (
+//         node.tag === OffscreenComponent &&
+//         node.memoizedState !== null
+//       ) {
+//         // The children in this boundary are hidden. Toggle their visibility
+//         // before appending.
+//         const child = node.child;
+//         if (child !== null) {
+//           child.return = node;
+//         }
+//         appendAllChildrenToContainer(containerChildSet, node, true, true);
+//       } else if (node.child !== null) {
+//         node.child.return = node;
+//         node = node.child;
+//         continue;
+//       }
+//       if (node === workInProgress) {
+//         return;
+//       }
+//       while (node.sibling === null) {
+//         if (node.return === null || node.return === workInProgress) {
+//           return;
+//         }
+//         node = node.return;
+//       }
+//       node.sibling.return = node.return;
+//       node = node.sibling;
+//     }
+//   };
+//   updateHostContainer = function(current: null | Fiber, workInProgress: Fiber) {
+//     const portalOrRoot: {
+//       containerInfo: Container,
+//       pendingChildren: ChildSet,
+//       ...
+//     } = workInProgress.stateNode;
+//     const childrenUnchanged = hadNoMutationsEffects(current, workInProgress);
+//     if (childrenUnchanged) {
+//       // No changes, just reuse the existing instance.
+//     } else {
+//       const container = portalOrRoot.containerInfo;
+//       const newChildSet = createContainerChildSet(container);
+//       // If children might have changed, we have to add them all to the set.
+//       appendAllChildrenToContainer(newChildSet, workInProgress, false, false);
+//       portalOrRoot.pendingChildren = newChildSet;
+//       // Schedule an update on the container to swap out the container.
+//       markUpdate(workInProgress);
+//       finalizeContainerChildren(container, newChildSet);
+//     }
+//   };
+//   updateHostComponent = function(
+//     current: Fiber,
+//     workInProgress: Fiber,
+//     type: Type,
+//     newProps: Props,
+//     rootContainerInstance: Container,
+//   ) {
+//     const currentInstance = current.stateNode;
+//     const oldProps = current.memoizedProps;
+//     // If there are no effects associated with this node, then none of our children had any updates.
+//     // This guarantees that we can reuse all of them.
+//     const childrenUnchanged = hadNoMutationsEffects(current, workInProgress);
+//     if (childrenUnchanged && oldProps === newProps) {
+//       // No changes, just reuse the existing instance.
+//       // Note that this might release a previous clone.
+//       workInProgress.stateNode = currentInstance;
+//       return;
+//     }
+//     const recyclableInstance: Instance = workInProgress.stateNode;
+//     const currentHostContext = getHostContext();
+//     let updatePayload = null;
+//     if (oldProps !== newProps) {
+//       updatePayload = prepareUpdate(
+//         recyclableInstance,
+//         type,
+//         oldProps,
+//         newProps,
+//         rootContainerInstance,
+//         currentHostContext,
+//       );
+//     }
+//     if (childrenUnchanged && updatePayload === null) {
+//       // No changes, just reuse the existing instance.
+//       // Note that this might release a previous clone.
+//       workInProgress.stateNode = currentInstance;
+//       return;
+//     }
+//     const newInstance = cloneInstance(
+//       currentInstance,
+//       updatePayload,
+//       type,
+//       oldProps,
+//       newProps,
+//       workInProgress,
+//       childrenUnchanged,
+//       recyclableInstance,
+//     );
+//     if (
+//       finalizeInitialChildren(
+//         newInstance,
+//         type,
+//         newProps,
+//         rootContainerInstance,
+//         currentHostContext,
+//       )
+//     ) {
+//       markUpdate(workInProgress);
+//     }
+//     workInProgress.stateNode = newInstance;
+//     if (childrenUnchanged) {
+//       // If there are no other effects in this tree, we need to flag this node as having one.
+//       // Even though we're not going to use it for anything.
+//       // Otherwise parents won't know that there are new children to propagate upwards.
+//       markUpdate(workInProgress);
+//     } else {
+//       // If children might have changed, we have to add them all to the set.
+//       appendAllChildren(newInstance, workInProgress, false, false);
+//     }
+//   };
+//   updateHostText = function(
+//     current: Fiber,
+//     workInProgress: Fiber,
+//     oldText: string,
+//     newText: string,
+//   ) {
+//     if (oldText !== newText) {
+//       // If the text content differs, we'll create a new text instance for it.
+//       const rootContainerInstance = getRootHostContainer();
+//       const currentHostContext = getHostContext();
+//       workInProgress.stateNode = createTextInstance(
+//         newText,
+//         rootContainerInstance,
+//         currentHostContext,
+//         workInProgress,
+//       );
+//       // We'll have to mark it as having an effect, even though we won't use the effect for anything.
+//       // This lets the parents know that at least one of their children has changed.
+//       markUpdate(workInProgress);
+//     } else {
+//       workInProgress.stateNode = current.stateNode;
+//     }
+//   };
+// }
 
 function markRef(workInProgress: Fiber) {
   workInProgress.flags |= Ref;

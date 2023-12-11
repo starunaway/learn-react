@@ -395,12 +395,10 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
   // Determine the next lanes to work on, and their priority.
   // todo 暂时不使用 lane 的优先级, 先默认都是 NoLanes
-  // const nextLanes = getNextLanes(
-  //   root,
-  //   root === workInProgressRoot ? workInProgressRootRenderLanes : NoLanes
-  // );
-
-  const nextLanes = NoLanes;
+  const nextLanes = getNextLanes(
+    root,
+    root === workInProgressRoot ? workInProgressRootRenderLanes : NoLanes
+  );
 
   if (nextLanes === NoLanes) {
     // Special case: There's nothing to work on.
@@ -538,6 +536,45 @@ export function markRootFinished(root: FiberRoot, remainingLanes: Lanes) {
     expirationTimes[index] = NoTimestamp;
 
     lanes &= ~lane;
+  }
+}
+
+export function flushSync<R>(fn?: () => R) {
+  // In legacy mode, we flush pending passive effects at the beginning of the
+  // next event, not at the end of the previous one.
+  if (
+    rootWithPendingPassiveEffects !== null &&
+    rootWithPendingPassiveEffects.tag === LegacyRoot &&
+    (executionContext & (RenderContext | CommitContext)) === NoContext
+  ) {
+    flushPassiveEffects();
+  }
+
+  const prevExecutionContext = executionContext;
+  executionContext |= BatchedContext;
+
+  const prevTransition = ReactCurrentBatchConfig.transition;
+  const previousPriority = getCurrentUpdatePriority();
+
+  try {
+    ReactCurrentBatchConfig.transition = null;
+    setCurrentUpdatePriority(DiscreteEventPriority);
+    if (fn) {
+      return fn();
+    } else {
+      return undefined;
+    }
+  } finally {
+    setCurrentUpdatePriority(previousPriority);
+    ReactCurrentBatchConfig.transition = prevTransition;
+
+    executionContext = prevExecutionContext;
+    // Flush the immediate callbacks that were scheduled during this batch.
+    // Note that this will happen even if batchedUpdates is higher up
+    // the stack.
+    if ((executionContext & (RenderContext | CommitContext)) === NoContext) {
+      flushSyncCallbacks();
+    }
   }
 }
 

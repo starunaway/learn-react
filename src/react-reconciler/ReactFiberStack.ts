@@ -5,7 +5,7 @@ let index = -1;
 
 const valueStack: Array<any> = [];
 
-let fiberStack: Array<Fiber | null>;
+// let fiberStack: Array<Fiber | null>;
 export function createCursor<T>(defaultValue: T): StackCursor<T> {
   return {
     current: defaultValue,
@@ -22,9 +22,9 @@ export function pop<T>(cursor: StackCursor<T>, fiber: Fiber): void {
     return;
   }
 
-  if (fiber !== fiberStack[index]) {
-    console.error('Unexpected Fiber popped.');
-  }
+  // if (fiber !== fiberStack[index]) {
+  //   console.error('Unexpected Fiber popped.');
+  // }
 
   cursor.current = valueStack[index];
 

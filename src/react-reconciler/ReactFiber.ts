@@ -3,7 +3,7 @@ import { ReactElement, ReactFragment, ReactPortal, RefObject } from '../shared/R
 import { Flags, NoFlags, StaticMask } from './ReactFiberFlags';
 import { Lane, Lanes, NoLanes } from './ReactFiberLane';
 import { Fiber } from './ReactInternalTypes';
-import { TypeOfMode } from './ReactTypeOfMode';
+import { NoMode, TypeOfMode } from './ReactTypeOfMode';
 import {
   ClassComponent,
   Fragment,
@@ -384,4 +384,10 @@ export function createFiberFromPortal(portal: ReactPortal, mode: TypeOfMode, lan
 function shouldConstruct(Component: Function) {
   const prototype = Component.prototype;
   return !!(prototype && prototype.isReactComponent);
+}
+
+export function createFiberFromHostInstanceForDeletion(): Fiber {
+  const fiber = createFiber(HostComponent, null, null, NoMode);
+  fiber.elementType = 'DELETED';
+  return fiber;
 }

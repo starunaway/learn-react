@@ -1,6 +1,6 @@
 import { FiberNode } from './ReactFiber';
 import { initializeUpdateQueue } from './ReactFiberClassUpdateQueue';
-import { NoLane, NoLanes } from './ReactFiberLane';
+import { NoLane, NoLanes, NoTimestamp, createLaneMap } from './ReactFiberLane';
 import { PendingSuspenseBoundaries, Transition } from './ReactFiberTracingMarkerComponent';
 import { Container, FiberRoot } from './ReactInternalTypes';
 import { type RootTag } from './ReactRootTags';
@@ -10,7 +10,7 @@ import { HostRoot } from './ReactWorkTags';
 export type RootState = {
   element: any;
   isDehydrated: boolean;
-  cache: Cache;
+  cache: Cache | null;
   pendingSuspenseBoundaries: PendingSuspenseBoundaries | null;
   transitions: Set<Transition> | null;
 };
@@ -53,8 +53,8 @@ class FiberRootNode {
     this.pendingContext = null;
     this.callbackNode = null;
     this.callbackPriority = NoLane;
-    // this.eventTimes = createLaneMap(NoLanes);
-    // this.expirationTimes = createLaneMap(NoTimestamp);
+    this.eventTimes = createLaneMap(NoLanes);
+    this.expirationTimes = createLaneMap(NoTimestamp);
 
     this.pendingLanes = NoLanes;
     this.suspendedLanes = NoLanes;
@@ -64,7 +64,7 @@ class FiberRootNode {
     this.finishedLanes = NoLanes;
 
     this.entangledLanes = NoLanes;
-    // this.entanglements = createLaneMap(NoLanes);
+    this.entanglements = createLaneMap(NoLanes);
 
     // this.hiddenUpdates = createLaneMap(null);
 
@@ -85,6 +85,37 @@ export function createFiberRoot(containerInfo: Container, tag: RootTag): FiberRo
   root.current = uninitializedFiber;
   uninitializedFiber.stateNode = root;
 
+  // if (enableCache) {
+  //   const initialCache = createCache();
+  //   retainCache(initialCache);
+
+  //   // The pooledCache is a fresh cache instance that is used temporarily
+  //   // for newly mounted boundaries during a render. In general, the
+  //   // pooledCache is always cleared from the root at the end of a render:
+  //   // it is either released when render commits, or moved to an Offscreen
+  //   // component if rendering suspends. Because the lifetime of the pooled
+  //   // cache is distinct from the main memoizedState.cache, it must be
+  //   // retained separately.
+  //   root.pooledCache = initialCache;
+  //   retainCache(initialCache);
+  //   const initialState: RootState = {
+  //     element: initialChildren,
+  //     isDehydrated: hydrate,
+  //     cache: initialCache,
+  //     transitions: null,
+  //     pendingSuspenseBoundaries: null,
+  //   };
+  //   uninitializedFiber.memoizedState = initialState;
+  // } else {
+  const initialState: RootState = {
+    element: null, // initialChildren,
+    isDehydrated: false,
+    cache: null, // not enabled yet
+    transitions: null,
+    pendingSuspenseBoundaries: null,
+  };
+  uninitializedFiber.memoizedState = initialState;
+  // }
   //   const initialState: RootState = {
   //     element: initialChildren,
   //     isDehydrated: hydrate,

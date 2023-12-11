@@ -233,6 +233,7 @@ export function commitMount(
 }
 
 export const supportsMutation = true;
+export const supportsPersistence = false;
 
 export function commitUpdate(
   domElement: Instance,
@@ -320,7 +321,6 @@ export function insertInContainerBefore(
 }
 
 // dom 下为 false
-export const supportsPersistence = false;
 
 export function removeChild(
   parentInstance: Instance,
@@ -526,4 +526,12 @@ export function createTextInstance(
   const textNode: TextInstance = createTextNode(text, rootContainerInstance);
   precacheFiberNode(internalInstanceHandle as Fiber, textNode);
   return textNode;
+}
+
+export function shouldDeleteUnhydratedTailInstances(parentType: string): boolean {
+  return parentType !== 'head' && parentType !== 'body';
+}
+
+export function getNextHydratableSibling(instance: HydratableInstance): null | HydratableInstance {
+  return getNextHydratable(instance.nextSibling);
 }
