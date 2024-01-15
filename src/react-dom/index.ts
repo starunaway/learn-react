@@ -1,4 +1,4 @@
-import { createContainer } from '../react-reconciler/ReactFiberReconciler';
+import { createContainer, updateContainer } from '../react-reconciler/ReactFiberReconciler';
 import { FiberRoot } from '../react-reconciler/ReactInternalTypes';
 import { RootTag } from '../react-reconciler/ReactRootTags';
 import { ReactNodeList } from '../shared/ReactTypes';
@@ -8,9 +8,37 @@ import { listenToAllSupportedEvents } from './events/DOMPluginEventSystem';
 
 export type RootType = {
   render(children: ReactNodeList): void;
-  unmount(): void;
+  unmount?(): void;
   _internalRoot: FiberRoot | null;
 } & mixed;
+
+class ReactDOMRoot {
+  _internalRoot: FiberRoot | null;
+  constructor(public internalRoot: FiberRoot) {
+    this._internalRoot = internalRoot;
+  }
+
+  render(children: ReactNodeList): void {
+    const root = this._internalRoot;
+    if (root === null) {
+      throw new Error('Cannot update an unmounted root.');
+    }
+    updateContainer(children, root, null, null);
+  }
+
+  //   unmount(): void {
+  //     const root = this._internalRoot;
+  //     if (root !== null) {
+  //       this._internalRoot = null;
+  //       const container = root.containerInfo;
+
+  //       flushSync(() => {
+  //         updateContainer(null, root, null, null);
+  //       });
+  //       unmarkContainerAsRoot(container);
+  //     }
+  //   }
+}
 
 export function createRoot(container: Element | Document | DocumentFragment): RootType {
   let isStrictMode = false;

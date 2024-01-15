@@ -20686,6 +20686,8 @@
   }
 
   function getContextForSubtree(parentComponent) {
+    console.log("getContextForSubtree parentComponent", parentComponent);
+
     if (!parentComponent) {
       return emptyContextObject;
     }
@@ -20755,6 +20757,7 @@
     var current = container.current;
     var eventTime = requestEventTime();
     var lane = requestUpdateLane(current);
+    console.log("updateContainer", parentComponent);
     var context = getContextForSubtree(parentComponent);
 
     if (container.context === null) {

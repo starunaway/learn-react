@@ -1,4 +1,6 @@
 import { Container } from '../react-dom/ReactFiberHostConfig';
+import { ReactNodeList } from '../shared/ReactTypes';
+
 import {
   FiberRoot,
   SuspenseHydrationCallbacks,
@@ -30,4 +32,40 @@ export function createContainer(
     onRecoverableError,
     transitionCallbacks
   );
+}
+
+export function updateContainer(
+  element: ReactNodeList,
+  container: FiberRoot,
+  parentComponent?: null,
+  callback?: Function | null
+): Lane {
+  const current = container.current;
+  const eventTime = requestEventTime();
+  const lane = requestUpdateLane(current);
+
+  const context = getContextForSubtree(parentComponent);
+  if (container.context === null) {
+    container.context = context;
+  } else {
+    container.pendingContext = context;
+  }
+
+  const update = createUpdate(eventTime, lane);
+  // Caution: React DevTools currently depends on this property
+  // being called "element".
+  update.payload = { element };
+
+  callback = callback === undefined ? null : callback;
+  if (callback !== null) {
+    update.callback = callback;
+  }
+
+  const root = enqueueUpdate(current, update, lane);
+  if (root !== null) {
+    scheduleUpdateOnFiber(root, current, lane, eventTime);
+    entangleTransitions(root, current, lane);
+  }
+
+  return lane;
 }
