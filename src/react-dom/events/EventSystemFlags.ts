@@ -1,0 +1,7 @@
+export enum EventSystemFlags {
+  IS_EVENT_HANDLE_NON_MANAGED_NODE = 1,
+  IS_NON_DELEGATED = 1 << 1,
+  IS_CAPTURE_PHASE = 1 << 2,
+  IS_PASSIVE = 1 << 3,
+  IS_LEGACY_FB_SUPPORT_MODE = 1 << 4,
+}
