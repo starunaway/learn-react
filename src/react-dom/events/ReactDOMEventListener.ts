@@ -14,6 +14,7 @@ import {
 import ReactSharedInternals from '../../react/ReactSharedInternals';
 import { DOMEventName } from './DOMEventNames';
 import { EventSystemFlags } from './EventSystemFlags';
+import { AnyNativeEvent } from './PluginModuleType';
 
 const { ReactCurrentBatchConfig } = ReactSharedInternals;
 
@@ -43,7 +44,7 @@ function dispatchDiscreteEvent(
   domEventName: DOMEventName,
   eventSystemFlags: EventSystemFlags,
   container: EventTarget,
-  nativeEvent
+  nativeEvent: AnyNativeEvent
 ) {
   const previousPriority = getCurrentUpdatePriority();
   const prevTransition = ReactCurrentBatchConfig.transition;
@@ -61,7 +62,7 @@ function dispatchContinuousEvent(
   domEventName: DOMEventName,
   eventSystemFlags: EventSystemFlags,
   container: EventTarget,
-  nativeEvent
+  nativeEvent: AnyNativeEvent
 ) {
   const previousPriority = getCurrentUpdatePriority();
   const prevTransition = ReactCurrentBatchConfig.transition;
@@ -105,6 +106,8 @@ export function dispatchEvent(
   );
 }
 
+export let return_targetInst = null;
+
 function dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay(
   domEventName: DOMEventName,
   eventSystemFlags: EventSystemFlags,
@@ -139,7 +142,10 @@ function dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEve
   // queueing is accumulative.
   clearIfContinuousEvent(domEventName, nativeEvent);
 
-  if (eventSystemFlags & IS_CAPTURE_PHASE && isDiscreteEventThatRequiresHydration(domEventName)) {
+  if (
+    eventSystemFlags & EventSystemFlags.IS_CAPTURE_PHASE &&
+    isDiscreteEventThatRequiresHydration(domEventName)
+  ) {
     while (blockedOn !== null) {
       const fiber = getInstanceFromNode(blockedOn);
       if (fiber !== null) {

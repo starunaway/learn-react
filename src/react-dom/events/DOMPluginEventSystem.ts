@@ -1,7 +1,14 @@
 import { mixed } from '../../types';
 import { DOMEventName } from './DOMEventNames';
+import {
+  addEventBubbleListener,
+  addEventBubbleListenerWithPassiveFlag,
+  addEventCaptureListener,
+  addEventCaptureListenerWithPassiveFlag,
+} from './EventListener';
 import { allNativeEvents } from './EventRegistry';
 import { EventSystemFlags } from './EventSystemFlags';
+import { createEventListenerWrapperWithPriority } from './ReactDOMEventListener';
 
 // List of events that need to be individually attached to media elements.
 export const mediaEventTypes: Array<DOMEventName> = [
@@ -116,30 +123,28 @@ function addTrappedEventListener(
     }
   }
 
-  let unsubscribeListener;
-
   // TODO: There are too many combinations here. Consolidate them.
   if (isCapturePhaseListener) {
     if (isPassiveListener !== undefined) {
-      unsubscribeListener = addEventCaptureListenerWithPassiveFlag(
+      addEventCaptureListenerWithPassiveFlag(
         targetContainer,
         domEventName,
         listener,
         isPassiveListener
       );
     } else {
-      unsubscribeListener = addEventCaptureListener(targetContainer, domEventName, listener);
+      addEventCaptureListener(targetContainer, domEventName, listener);
     }
   } else {
     if (isPassiveListener !== undefined) {
-      unsubscribeListener = addEventBubbleListenerWithPassiveFlag(
+      addEventBubbleListenerWithPassiveFlag(
         targetContainer,
         domEventName,
         listener,
         isPassiveListener
       );
     } else {
-      unsubscribeListener = addEventBubbleListener(targetContainer, domEventName, listener);
+      addEventBubbleListener(targetContainer, domEventName, listener);
     }
   }
 }
