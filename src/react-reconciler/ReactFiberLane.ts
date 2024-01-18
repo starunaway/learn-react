@@ -42,8 +42,8 @@ export enum Lane {
   OffscreenLane = /*                    */ 0b1000000000000000000000000000000,
 }
 
-export const NoLanes: Lanes = /*                        */ 0b0000000000000000000000000000000;
+export const NoLanes: Lanes = /*        */ 0b0000000000000000000000000000000;
 
 export const SomeRetryLane = Lane.RetryLane1;
 
-const NonIdleLanes: Lanes = /*                          */ 0b0001111111111111111111111111111;
+const NonIdleLanes: Lanes = /*          */ 0b0001111111111111111111111111111;

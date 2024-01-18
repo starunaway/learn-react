@@ -1,5 +1,6 @@
 import { Container } from '../react-dom/ReactFiberHostConfig';
 import { ReactNodeList } from '../shared/ReactTypes';
+import { Lane } from './ReactFiberLane';
 
 import {
   FiberRoot,
@@ -37,6 +38,7 @@ export function createContainer(
 export function updateContainer(
   element: ReactNodeList,
   container: FiberRoot,
+  //   fixme: 18.2 版本都是 createRoot().render 和 FC，原来的 Legacy 和 ClassComponent 都不需要看，因此不需要在parentComponent参数
   parentComponent?: null,
   callback?: Function | null
 ): Lane {

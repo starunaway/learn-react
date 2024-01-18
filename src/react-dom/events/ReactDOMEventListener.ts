@@ -3,6 +3,9 @@ import {
   getCurrentUpdatePriority,
   setCurrentUpdatePriority,
 } from '../../react-reconciler/ReactEventPriorities';
+import { getContainerFromFiber } from '../../react-reconciler/ReactFiberTreeReflection';
+import { Fiber, FiberRoot } from '../../react-reconciler/ReactInternalTypes';
+import { WorkTag } from '../../react-reconciler/ReactWorkTags';
 import {
   IdlePriority,
   ImmediatePriority,
@@ -12,12 +15,20 @@ import {
   getCurrentPriorityLevel,
 } from '../../react-reconciler/Scheduler';
 import ReactSharedInternals from '../../react/ReactSharedInternals';
+import { getClosestInstanceFromNode } from '../ReactDOMComponentTree';
+import { Container, SuspenseInstance } from '../ReactFiberHostConfig';
 import { DOMEventName } from './DOMEventNames';
 import { EventSystemFlags } from './EventSystemFlags';
 import { AnyNativeEvent } from './PluginModuleType';
+import getEventTarget from './getEventTarget';
 
 const { ReactCurrentBatchConfig } = ReactSharedInternals;
 
+/**
+ * read: 不同的事件有不同的处理优先级
+ * read: react 定义了不同事件的优先级，比如离散事件(click)/ 持续性事件(scroll/drag)等。不同的优先级通过不同的方式进行处理
+ * read: 这里的代码感觉可以合成一出，区别只是setCurrentUpdatePriority,真正dispatchEvent都是一个
+ */
 export function createEventListenerWrapperWithPriority(
   targetContainer: EventTarget,
   domEventName: DOMEventName,
@@ -40,6 +51,13 @@ export function createEventListenerWrapperWithPriority(
   return listenerWrapper.bind(null, domEventName, eventSystemFlags, targetContainer);
 }
 
+/**
+ * read: 大部分事件都是离散事件
+ * @param domEventName
+ * @param eventSystemFlags
+ * @param container
+ * @param nativeEvent
+ */
 function dispatchDiscreteEvent(
   domEventName: DOMEventName,
   eventSystemFlags: EventSystemFlags,
@@ -106,7 +124,7 @@ export function dispatchEvent(
   );
 }
 
-export let return_targetInst = null;
+export let return_targetInst: Fiber | null = null;
 
 function dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay(
   domEventName: DOMEventName,
@@ -186,6 +204,69 @@ function dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEve
     null,
     targetContainer
   );
+}
+
+/**
+ * read: 前 3 个参数已经确定没有用到，在其他使用该函数的地方, 可以删除了
+ * @param domEventName
+ * @param eventSystemFlags
+ * @param targetContainer
+ * @param nativeEvent
+ * @returns
+ */
+export function findInstanceBlockingEvent(
+  domEventName: DOMEventName,
+  eventSystemFlags: EventSystemFlags,
+  targetContainer: EventTarget,
+  nativeEvent: AnyNativeEvent
+): null | Container | SuspenseInstance {
+  // TODO: Warn if _enabled is false.
+
+  return_targetInst = null;
+
+  const nativeEventTarget = getEventTarget(nativeEvent);
+  let targetInst = getClosestInstanceFromNode(nativeEventTarget);
+
+  if (targetInst !== null) {
+    const nearestMounted = getNearestMountedFiber(targetInst);
+    if (nearestMounted === null) {
+      // This tree has been unmounted already. Dispatch without a target.
+      targetInst = null;
+    } else {
+      const tag = nearestMounted.tag;
+      if (tag === WorkTag.SuspenseComponent) {
+        const instance = getSuspenseInstanceFromFiber(nearestMounted);
+        if (instance !== null) {
+          // Queue the event to be replayed later. Abort dispatching since we
+          // don't want this event dispatched twice through the event system.
+          // TODO: If this is the first discrete event in the queue. Schedule an increased
+          // priority for this boundary.
+          return instance;
+        }
+        // This shouldn't happen, something went wrong but to avoid blocking
+        // the whole system, dispatch the event without a target.
+        // TODO: Warn.
+        targetInst = null;
+      } else if (tag === WorkTag.HostRoot) {
+        const root: FiberRoot = nearestMounted.stateNode;
+        if (isRootDehydrated(root)) {
+          // If this happens during a replay something went wrong and it might block
+          // the whole system.
+          return getContainerFromFiber(nearestMounted);
+        }
+        targetInst = null;
+      } else if (nearestMounted !== targetInst) {
+        // If we get an event (ex: img onload) before committing that
+        // component's mount, ignore it for now (that is, treat it as if it was an
+        // event on a non-React tree). We might also consider queueing events and
+        // dispatching them after the mount.
+        targetInst = null;
+      }
+    }
+  }
+  return_targetInst = targetInst;
+  // We're not blocked on anything.
+  return null;
 }
 
 export function getEventPriority(domEventName: DOMEventName): EventPriority {
@@ -275,6 +356,7 @@ export function getEventPriority(domEventName: DOMEventName): EventPriority {
       // We might be in the Scheduler callback.
       // Eventually this mechanism will be replaced by a check
       // of the current priority on the native scheduler.
+      // read: message 事件可能出现在 postMessage，这个时候要根据调度的优先级来决定触发顺序
       const schedulerPriority = getCurrentPriorityLevel();
       switch (schedulerPriority) {
         case ImmediatePriority:

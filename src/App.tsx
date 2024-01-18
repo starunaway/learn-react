@@ -99,4 +99,6 @@ function App({ name }: { name: string }) {
   );
 }
 
+// 需要测试的： 1. 合成事件中同时 setstate 和 原生事件（settimeout）中setstate
+// children 默认下，组件是否被 memo。和 diff 相关
 export default App;

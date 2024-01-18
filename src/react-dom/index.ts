@@ -23,9 +23,10 @@ class ReactDOMRoot {
     if (root === null) {
       throw new Error('Cannot update an unmounted root.');
     }
-    updateContainer(children, root, null, null);
+    updateContainer(children, root);
   }
 
+  // fixme: 目前不需要支持unmount
   //   unmount(): void {
   //     const root = this._internalRoot;
   //     if (root !== null) {

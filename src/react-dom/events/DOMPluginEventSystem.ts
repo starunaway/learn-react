@@ -85,6 +85,13 @@ export function listenToAllSupportedEvents(rootContainerElement: EventTarget & m
   }
 }
 
+/**
+ * read: react 合成事件，不同类型的事件有不同的触发优先级
+ * read: react 监听了所有类型的事件，在具体的 dom 元素上再做 dispatchEvent，以达到优先级控制的目的
+ * @param domEventName
+ * @param isCapturePhaseListener
+ * @param target
+ */
 export function listenToNativeEvent(
   domEventName: DOMEventName,
   isCapturePhaseListener: boolean,
@@ -124,7 +131,9 @@ function addTrappedEventListener(
   }
 
   // TODO: There are too many combinations here. Consolidate them.
+  // read: 确实，感觉可以合并一下参数列表，本质上都是调用的 addEventListener
   if (isCapturePhaseListener) {
+    // 捕获阶段
     if (isPassiveListener !== undefined) {
       addEventCaptureListenerWithPassiveFlag(
         targetContainer,
@@ -136,6 +145,7 @@ function addTrappedEventListener(
       addEventCaptureListener(targetContainer, domEventName, listener);
     }
   } else {
+    // 冒泡阶段
     if (isPassiveListener !== undefined) {
       addEventBubbleListenerWithPassiveFlag(
         targetContainer,

@@ -21,7 +21,7 @@ export enum Flags {
   ForceUpdateForLegacySuspense = /* */ 0b00000000100000000000000000,
   DidPropagateContext = /*          */ 0b00000001000000000000000000,
   NeedsPropagation = /*             */ 0b00000010000000000000000000,
-  Forked = /*                      */ 0b00000100000000000000000000,
+  Forked = /*                       */ 0b00000100000000000000000000,
 
   RefStatic = /*                    */ 0b00001000000000000000000000,
   LayoutStatic = /*                 */ 0b00010000000000000000000000,

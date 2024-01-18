@@ -14,6 +14,7 @@ export function addEventCaptureListenerWithPassiveFlag(
 ): void {
   target.addEventListener(eventType, listener as EventListenerOrEventListenerObject, {
     capture: true,
+    // read:设置为 true 时，表示 listener 永远不会调用 preventDefault()
     passive,
   });
 }
@@ -33,6 +34,7 @@ export function addEventBubbleListenerWithPassiveFlag(
   passive: boolean
 ): void {
   target.addEventListener(eventType, listener as EventListenerOrEventListenerObject, {
+    // read: true 时，表示 listener 永远不会调用 preventDefault()
     passive,
   });
 }
