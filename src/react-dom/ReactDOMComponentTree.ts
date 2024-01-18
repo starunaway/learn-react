@@ -1,6 +1,14 @@
 import { Fiber } from '../react-reconciler/ReactInternalTypes';
+import { WorkTag } from '../react-reconciler/ReactWorkTags';
 import { mixed } from '../types';
-import { Container, getParentSuspenseInstance } from './ReactFiberHostConfig';
+import {
+  Container,
+  Instance,
+  Props,
+  SuspenseInstance,
+  TextInstance,
+  getParentSuspenseInstance,
+} from './ReactFiberHostConfig';
 
 const randomKey = Math.random().toString(36).slice(2);
 const internalInstanceKey = '__reactFiber$' + randomKey;
@@ -99,4 +107,48 @@ export function getClosestInstanceFromNode(targetNode: Node & mixed): null | Fib
     parentNode = targetNode.parentNode;
   }
   return null;
+}
+
+/**
+ * Given a DOM node, return the ReactDOMComponent or ReactDOMTextComponent
+ * instance, or null if the node was not rendered by this React.
+ */
+export function getInstanceFromNode(node: Node & mixed): Fiber | null {
+  const inst: Fiber | null = node[internalInstanceKey] || node[internalContainerInstanceKey];
+  if (inst) {
+    if (
+      inst.tag === WorkTag.HostComponent ||
+      inst.tag === WorkTag.HostText ||
+      inst.tag === WorkTag.SuspenseComponent ||
+      inst.tag === WorkTag.HostRoot
+    ) {
+      return inst;
+    } else {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function getFiberCurrentPropsFromNode(
+  node: (Instance | TextInstance | SuspenseInstance) & mixed
+): Props {
+  return node[internalPropsKey] || null;
+}
+
+/**
+ * Given a ReactDOMComponent or ReactDOMTextComponent, return the corresponding
+ * DOM node.
+ */
+export function getNodeFromInstance(inst: Fiber): Instance | TextInstance {
+  console.log('getNodeFromInstance 运行时这里的 tag 一定是下面这两种吗？');
+  if (inst.tag === WorkTag.HostComponent || inst.tag === WorkTag.HostText) {
+    // In Fiber this, is just the state node right now. We assume it will be
+    // a host component or host text.
+    return inst.stateNode;
+  }
+
+  // Without this first invariant, passing a non-DOM-component triggers the next
+  // invariant for a missing parent, which is super confusing.
+  throw new Error('getNodeFromInstance: Invalid argument.');
 }

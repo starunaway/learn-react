@@ -1,11 +1,28 @@
 import { FiberRoot } from '../react-reconciler/ReactInternalTypes';
 import { mixed } from '../types';
 
+export type Type = string;
+export type Props = {
+  autoFocus?: boolean;
+  children?: mixed;
+  disabled?: boolean;
+  hidden?: boolean;
+  suppressHydrationWarning?: boolean;
+  dangerouslySetInnerHTML?: mixed;
+  style?: { display?: string } & mixed;
+  bottom?: null | number;
+  left?: null | number;
+  right?: null | number;
+  top?: null | number;
+} & mixed;
+
 type TimeoutID = number;
 
 export type TimeoutHandle = TimeoutID;
 export type NoTimeout = -1;
 
+export type Instance = Element;
+export type TextInstance = Text;
 /**
  *  read: 此 Suspense 不是 用于用户体验的 Suspense
  *  read: 读到 React 的 Suspense 时候，再来对比一下

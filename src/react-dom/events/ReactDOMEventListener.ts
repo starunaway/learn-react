@@ -3,7 +3,12 @@ import {
   getCurrentUpdatePriority,
   setCurrentUpdatePriority,
 } from '../../react-reconciler/ReactEventPriorities';
-import { getContainerFromFiber } from '../../react-reconciler/ReactFiberTreeReflection';
+import { isRootDehydrated } from '../../react-reconciler/ReactFiberShellHydration';
+import {
+  getContainerFromFiber,
+  getNearestMountedFiber,
+  getSuspenseInstanceFromFiber,
+} from '../../react-reconciler/ReactFiberTreeReflection';
 import { Fiber, FiberRoot } from '../../react-reconciler/ReactInternalTypes';
 import { WorkTag } from '../../react-reconciler/ReactWorkTags';
 import {
@@ -15,12 +20,13 @@ import {
   getCurrentPriorityLevel,
 } from '../../react-reconciler/Scheduler';
 import ReactSharedInternals from '../../react/ReactSharedInternals';
-import { getClosestInstanceFromNode } from '../ReactDOMComponentTree';
+import { getClosestInstanceFromNode, getInstanceFromNode } from '../ReactDOMComponentTree';
 import { Container, SuspenseInstance } from '../ReactFiberHostConfig';
 import { DOMEventName } from './DOMEventNames';
 import { EventSystemFlags } from './EventSystemFlags';
 import { AnyNativeEvent } from './PluginModuleType';
 import getEventTarget from './getEventTarget';
+import { dispatchEventForPluginEventSystem } from './DOMPluginEventSystem';
 
 const { ReactCurrentBatchConfig } = ReactSharedInternals;
 
@@ -235,6 +241,8 @@ export function findInstanceBlockingEvent(
     } else {
       const tag = nearestMounted.tag;
       if (tag === WorkTag.SuspenseComponent) {
+        // read: 这里是 Suspense 组件, 将事件挂载到实例上
+        // read: 如果是 Suspense 的 fallback 上的事件监听呢？需要看 Suspense的实现
         const instance = getSuspenseInstanceFromFiber(nearestMounted);
         if (instance !== null) {
           // Queue the event to be replayed later. Abort dispatching since we
