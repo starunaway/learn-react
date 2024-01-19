@@ -1,5 +1,12 @@
 import { restoreControlledState as ReactDOMInputRestoreControlledState } from './ReactDOMInput';
 
+/**
+ * 处理用户输入类型
+ * @param domElement
+ * @param tag
+ * @param props
+ * @returns
+ */
 export function restoreControlledState(domElement: Element, tag: string, props: Object): void {
   switch (tag) {
     case 'input':

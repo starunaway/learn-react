@@ -17,3 +17,13 @@ export function getCurrentUpdatePriority(): EventPriority {
 export function setCurrentUpdatePriority(newPriority: EventPriority) {
   currentUpdatePriority = newPriority;
 }
+
+export function runWithPriority<T>(priority: EventPriority, fn: () => T): T {
+  const previousPriority = currentUpdatePriority;
+  try {
+    currentUpdatePriority = priority;
+    return fn();
+  } finally {
+    currentUpdatePriority = previousPriority;
+  }
+}

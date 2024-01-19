@@ -34,6 +34,8 @@ import {
 import { restoreControlledState } from './ReactDOMComponent';
 
 // read: 这里提前注入了一堆 effect 方法。在不同的平台下可能不同，这里是 dom 环境
+// read: 这里有很多和 ssr 相关的逻辑。分散到了具体逻辑里
+// read: 因为 dom 的事件处理和 react 的更新相关，所有 [dom事件]<->[react更新]需要互相通知对方状态，就是这里的 effect
 setAttemptSynchronousHydration(attemptSynchronousHydration);
 setAttemptDiscreteHydration(attemptDiscreteHydration);
 setAttemptContinuousHydration(attemptContinuousHydration);
