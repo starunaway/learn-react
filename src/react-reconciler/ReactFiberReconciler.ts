@@ -65,6 +65,10 @@ export function updateContainer(
 
   const root = enqueueUpdate(current, update, lane);
   if (root !== null) {
+    console.log('这里是入口,react 更新从此处开始');
+    console.log(
+      '如果是后续渲染,应该在其他地方，可以在合成事件 / setState/ useEffect 等事件内打断点'
+    );
     scheduleUpdateOnFiber(root, current, lane, eventTime);
     entangleTransitions(root, current, lane);
   }

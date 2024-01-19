@@ -30,6 +30,12 @@ function restoreStateOfTarget(target: Node) {
   }
 }
 
+export function setRestoreImplementation(
+  impl: (domElement: Element, tag: string, props: Object) => void
+): void {
+  restoreImpl = impl;
+}
+
 export function enqueueStateRestore(target: Node): void {
   if (restoreTarget) {
     if (restoreQueue) {

@@ -14,6 +14,10 @@ let batchedUpdatesImpl = function (fn: Function, ...bookkeeping: any[]) {
   return fn(bookkeeping);
 };
 
+let discreteUpdatesImpl = function (fn: Function, a: any, b: any, c: any, d: any) {
+  return fn(a, b, c, d);
+};
+
 let flushSyncImpl = function () {};
 
 function finishEventHandler() {
@@ -34,6 +38,7 @@ function finishEventHandler() {
 }
 
 export function batchedUpdates(fn: Function, a?: any, b?: any) {
+  console.log('batchedUpdates here');
   if (isInsideEventHandler) {
     // If we are currently inside another batch, we need to wait until it
     // fully completes before restoring state.
@@ -44,6 +49,17 @@ export function batchedUpdates(fn: Function, a?: any, b?: any) {
     return batchedUpdatesImpl(fn, a, b);
   } finally {
     isInsideEventHandler = false;
+    console.log('看下这里是最后来处理事件的绑定吗');
     finishEventHandler();
   }
+}
+
+export function setBatchingImplementation(
+  _batchedUpdatesImpl: typeof batchedUpdatesImpl,
+  _discreteUpdatesImpl: typeof discreteUpdatesImpl,
+  _flushSyncImpl: typeof flushSyncImpl
+) {
+  batchedUpdatesImpl = _batchedUpdatesImpl;
+  discreteUpdatesImpl = _discreteUpdatesImpl;
+  flushSyncImpl = _flushSyncImpl;
 }

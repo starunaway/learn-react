@@ -27,6 +27,12 @@ import { EventSystemFlags } from './EventSystemFlags';
 import { AnyNativeEvent } from './PluginModuleType';
 import getEventTarget from './getEventTarget';
 import { dispatchEventForPluginEventSystem } from './DOMPluginEventSystem';
+import {
+  attemptSynchronousHydration,
+  clearIfContinuousEvent,
+  isDiscreteEventThatRequiresHydration,
+  queueIfContinuousEvent,
+} from './ReactDOMEventReplaying';
 
 const { ReactCurrentBatchConfig } = ReactSharedInternals;
 

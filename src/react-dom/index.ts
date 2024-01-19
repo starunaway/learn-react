@@ -6,6 +6,48 @@ import { mixed } from '../types';
 import { markContainerAsRoot } from './ReactDOMComponentTree';
 import { listenToAllSupportedEvents } from './events/DOMPluginEventSystem';
 
+import {
+  setAttemptSynchronousHydration,
+  setAttemptDiscreteHydration,
+  setAttemptContinuousHydration,
+  setAttemptHydrationAtCurrentPriority,
+  setGetCurrentUpdatePriority,
+  setAttemptHydrationAtPriority,
+} from './events/ReactDOMEventReplaying';
+import { setBatchingImplementation } from './events/ReactDOMUpdateBatching';
+import { setRestoreImplementation } from './events/ReactDOMControlledComponent';
+
+import {
+  batchedUpdates,
+  discreteUpdates,
+  flushSync as flushSyncWithoutWarningIfAlreadyRendering,
+  attemptSynchronousHydration,
+  attemptDiscreteHydration,
+  attemptContinuousHydration,
+  attemptHydrationAtCurrentPriority,
+} from '../react-reconciler/ReactFiberReconciler';
+import {
+  runWithPriority,
+  getCurrentUpdatePriority,
+} from '../react-reconciler/ReactEventPriorities';
+
+import { restoreControlledState } from './ReactDOMComponent';
+
+// read: 这里提前注入了一堆 effect 方法。在不同的平台下可能不同，这里是 dom 环境
+setAttemptSynchronousHydration(attemptSynchronousHydration);
+setAttemptDiscreteHydration(attemptDiscreteHydration);
+setAttemptContinuousHydration(attemptContinuousHydration);
+setAttemptHydrationAtCurrentPriority(attemptHydrationAtCurrentPriority);
+setGetCurrentUpdatePriority(getCurrentUpdatePriority);
+setAttemptHydrationAtPriority(runWithPriority);
+
+setRestoreImplementation(restoreControlledState);
+setBatchingImplementation(
+  batchedUpdates,
+  discreteUpdates,
+  flushSyncWithoutWarningIfAlreadyRendering
+);
+
 export type RootType = {
   render(children: ReactNodeList): void;
   unmount?(): void;
