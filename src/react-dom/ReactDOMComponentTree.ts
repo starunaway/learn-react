@@ -18,7 +18,8 @@ const internalEventHandlersKey = '__reactEvents$' + randomKey;
 const internalEventHandlerListenersKey = '__reactListeners$' + randomKey;
 const internalEventHandlesSetKey = '__reactHandles$' + randomKey;
 
-export function markContainerAsRoot(hostRoot: Fiber, node: Container): void {
+export function markContainerAsRoot(hostRoot: Fiber | null, node: Container): void {
+  console.log('markContainerAsRoot 看下这里hostRoot是啥,以及使用的时候是什么:', hostRoot);
   node[internalContainerInstanceKey] = hostRoot;
 }
 

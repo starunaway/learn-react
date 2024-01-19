@@ -90,7 +90,8 @@ export function createRoot(container: Element | Document | DocumentFragment): Ro
   let concurrentUpdatesByDefaultOverride = false;
   let identifierPrefix = '';
   let onRecoverableError = reportError;
-  let transitionCallbacks = null;
+  // read: 这个配置是给transition trace 用到, 需要在createRoot的第二个参数传入, 可以先不看
+  // let transitionCallbacks = null;
 
   const root = createContainer(
     container,
@@ -99,10 +100,10 @@ export function createRoot(container: Element | Document | DocumentFragment): Ro
     isStrictMode,
     concurrentUpdatesByDefaultOverride,
     identifierPrefix,
-    onRecoverableError,
-    transitionCallbacks
+    onRecoverableError
+    // transitionCallbacks
   );
-  markContainerAsRoot(root.current, container);
+  markContainerAsRoot(root.current!, container);
 
   const rootContainerElement =
     container.nodeType === Node.COMMENT_NODE ? container.parentNode : container;

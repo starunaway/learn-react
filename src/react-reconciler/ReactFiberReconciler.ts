@@ -1,6 +1,7 @@
 import { Container } from '../react-dom/ReactFiberHostConfig';
 import { ReactNodeList } from '../shared/ReactTypes';
 import { Lane } from './ReactFiberLane';
+import { createFiberRoot } from './ReactFiberRoot';
 
 import type {
   Fiber,
@@ -42,8 +43,8 @@ export function createContainer(
   isStrictMode: boolean,
   concurrentUpdatesByDefaultOverride: null | boolean,
   identifierPrefix: string,
-  onRecoverableError: (error: any) => void,
-  transitionCallbacks: null | TransitionTracingCallbacks
+  onRecoverableError: (error: any) => void
+  // transitionCallbacks: null | TransitionTracingCallbacks
 ): FiberRoot {
   const hydrate = false;
   const initialChildren = null;
@@ -56,8 +57,8 @@ export function createContainer(
     isStrictMode,
     concurrentUpdatesByDefaultOverride,
     identifierPrefix,
-    onRecoverableError,
-    transitionCallbacks
+    onRecoverableError
+    // transitionCallbacks
   );
 }
 
