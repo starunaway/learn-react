@@ -1,11 +1,14 @@
-import { Container } from '../react-dom/ReactFiberHostConfig';
+import { Container, noTimeout } from '../react-dom/ReactFiberHostConfig';
 import { ReactNodeList } from '../shared/ReactTypes';
 import { mixed } from '../types';
 import type { Cache } from './ReactFiberCacheComponent';
-import { Lane, NoLanes } from './ReactFiberLane';
+import { Lane, NoLanes, NoTimestamp, createLaneMap } from './ReactFiberLane';
 import type { PendingSuspenseBoundaries, Transition } from './ReactFiberTracingMarkerComponent';
 import { Fiber, FiberRoot, SuspenseHydrationCallbacks } from './ReactInternalTypes';
 import { RootTag } from './ReactRootTags';
+import { createHostRootFiber } from './ReactFiber';
+
+import { createCache, retainCache } from './ReactFiberCacheComponent';
 
 export type RootState = {
   element: any;

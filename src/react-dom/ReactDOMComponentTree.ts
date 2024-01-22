@@ -1,5 +1,6 @@
 import { Fiber } from '../react-reconciler/ReactInternalTypes';
 import { WorkTag } from '../react-reconciler/ReactWorkTags';
+import { ReactScopeInstance } from '../shared/ReactTypes';
 import { mixed } from '../types';
 import {
   Container,
@@ -9,6 +10,7 @@ import {
   TextInstance,
   getParentSuspenseInstance,
 } from './ReactFiberHostConfig';
+import { ReactDOMEventHandleListener } from './shared/ReactDOMTypes';
 
 const randomKey = Math.random().toString(36).slice(2);
 const internalInstanceKey = '__reactFiber$' + randomKey;
@@ -152,4 +154,10 @@ export function getNodeFromInstance(inst: Fiber): Instance | TextInstance {
   // Without this first invariant, passing a non-DOM-component triggers the next
   // invariant for a missing parent, which is super confusing.
   throw new Error('getNodeFromInstance: Invalid argument.');
+}
+
+export function getEventHandlerListeners(
+  scope: EventTarget | ReactScopeInstance
+): null | Set<ReactDOMEventHandleListener> {
+  return (scope as any)[internalEventHandlerListenersKey] || null;
 }

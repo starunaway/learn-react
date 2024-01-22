@@ -71,3 +71,11 @@ export function getParentSuspenseInstance(targetInstance: Node): null | Suspense
   }
   return null;
 }
+
+export const noTimeout = -1;
+
+// -------------------
+//     Hydration
+// -------------------
+
+export const supportsHydration = true;

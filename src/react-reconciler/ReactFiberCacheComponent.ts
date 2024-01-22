@@ -24,3 +24,7 @@ export function createCache(): Cache {
 
   return cache;
 }
+
+export function retainCache(cache: Cache) {
+  cache.refCount++;
+}

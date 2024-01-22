@@ -7,6 +7,7 @@ import {
 } from './shared/DOMProperty';
 import sanitizeURL from './shared/sanitizeURL';
 import { getFiberCurrentPropsFromNode } from './ReactDOMComponentTree';
+import { enableCustomElementPropertySupport } from '../shared/ReactFeatureFlags';
 /**
  * Sets the value for a property on a node.
  *
@@ -25,7 +26,12 @@ export function setValueForProperty(
     return;
   }
 
-  if (isCustomComponentTag && name[0] === 'o' && name[1] === 'n') {
+  if (
+    enableCustomElementPropertySupport &&
+    isCustomComponentTag &&
+    name[0] === 'o' &&
+    name[1] === 'n'
+  ) {
     let eventName = name.replace(/Capture$/, '');
     const useCapture = name !== eventName;
     eventName = eventName.slice(2);
@@ -52,7 +58,7 @@ export function setValueForProperty(
     }
   }
 
-  if (isCustomComponentTag && name in node) {
+  if (enableCustomElementPropertySupport && isCustomComponentTag && name in node) {
     (node as any)[name] = value;
     return;
   }
@@ -60,10 +66,12 @@ export function setValueForProperty(
   if (shouldRemoveAttribute(name, value, propertyInfo, isCustomComponentTag)) {
     value = null;
   }
-  if (isCustomComponentTag && value === true) {
-    value = '';
-  }
 
+  if (enableCustomElementPropertySupport) {
+    if (isCustomComponentTag && value === true) {
+      value = '';
+    }
+  }
   // If the prop isn't in the special list, treat it as a simple attribute.
   if (isCustomComponentTag || propertyInfo === null) {
     if (isAttributeNameSafe(name)) {

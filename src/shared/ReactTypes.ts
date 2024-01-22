@@ -90,3 +90,10 @@ export type ReactContext<T> = {
 export interface Wakeable {
   then(onFulfill: () => mixed, onReject: () => mixed): void | Wakeable;
 }
+
+export type ReactScopeInstance = {
+  DO_NOT_USE_queryAllNodes(ReactScopeQuery: any): null | Array<Object>;
+  DO_NOT_USE_queryFirstNode(ReactScopeQuery: any): null | Object;
+  containsNode(arg0: Object): boolean;
+  getChildContextValues: <T>(context: ReactContext<T>) => Array<T>;
+};

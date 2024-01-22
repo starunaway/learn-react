@@ -10,6 +10,7 @@ import { Transition } from './ReactFiberTracingMarkerComponent';
 import { RootTag } from './ReactRootTags';
 import { TypeOfMode } from './ReactTypeOfMode';
 import { WorkTag } from './ReactWorkTags';
+import type { Cache } from './ReactFiberCacheComponent';
 
 export type ContextDependency<T> = {
   context: ReactContext<T>;

@@ -1,4 +1,8 @@
 import { Fiber } from '../../../react-reconciler/ReactInternalTypes';
+import {
+  disableInputAttributeSyncing,
+  enableCustomElementPropertySupport,
+} from '../../../shared/ReactFeatureFlags';
 import { getNodeFromInstance } from '../../ReactDOMComponentTree';
 import { InputWithWrapperState, setDefaultValue } from '../../ReactDOMInput';
 import { updateValueIfChanged } from '../../inputValueTracking';
@@ -112,9 +116,10 @@ function handleControlledInputBlur(node: InputWithWrapperState) {
   if (!state || !state.controlled || node.type !== 'number') {
     return;
   }
-
-  // If controlled, assign the value attribute to the current value on blur
-  setDefaultValue(node, 'number', node.value);
+  if (!disableInputAttributeSyncing) {
+    // If controlled, assign the value attribute to the current value on blur
+    setDefaultValue(node, 'number', node.value);
+  }
 }
 
 /**
@@ -152,7 +157,11 @@ function extractEvents(
     getTargetInstFunc = getTargetInstForInputOrChangeEvent;
   } else if (shouldUseClickEvent(targetNode as HTMLInputElement)) {
     getTargetInstFunc = getTargetInstForClickEvent;
-  } else if (targetInst && isCustomComponent(targetInst.elementType, targetInst.memoizedProps)) {
+  } else if (
+    enableCustomElementPropertySupport &&
+    targetInst &&
+    isCustomComponent(targetInst.elementType, targetInst.memoizedProps)
+  ) {
     getTargetInstFunc = getTargetInstForChangeEvent;
   }
 

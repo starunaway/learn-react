@@ -1,5 +1,7 @@
 // 对 dom 元素的各种属性做处理
 
+import { enableCustomElementPropertySupport } from '../../shared/ReactFeatureFlags';
+
 export enum PropertyType {
   // A reserved attribute.
   // It is handled by React separately and shouldn't be written to the DOM.
@@ -165,9 +167,16 @@ export function shouldRemoveAttribute(
   if (shouldRemoveAttributeWithWarning(name, value, propertyInfo, isCustomComponentTag)) {
     return true;
   }
+
   if (isCustomComponentTag) {
+    if (enableCustomElementPropertySupport) {
+      if (value === false) {
+        return true;
+      }
+    }
     return false;
   }
+
   if (propertyInfo !== null) {
     switch (propertyInfo.type) {
       case PropertyType.BOOLEAN:
@@ -207,7 +216,9 @@ const reservedProps = [
   'style',
 ];
 
-reservedProps.push('innerText', 'textContent');
+if (enableCustomElementPropertySupport) {
+  reservedProps.push('innerText', 'textContent');
+}
 
 reservedProps.forEach((name) => {
   properties[name] = new PropertyInfoRecord(

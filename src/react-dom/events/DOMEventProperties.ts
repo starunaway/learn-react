@@ -1,3 +1,4 @@
+import { enableCreateEventHandleAPI } from '../../shared/ReactFeatureFlags';
 import type { DOMEventName } from './DOMEventNames';
 import { registerTwoPhaseEvent } from './EventRegistry';
 
@@ -82,6 +83,14 @@ const simpleEventPluginEvents = [
     'waiting',
     'wheel',
   ];
+
+if (enableCreateEventHandleAPI) {
+  //read: 这两个暂时不看
+  // Special case: these two events don't have on* React handler
+  // and are only accessible via the createEventHandle API.
+  topLevelEventsToReactNames.set('beforeblur', null);
+  topLevelEventsToReactNames.set('afterblur', null);
+}
 
 function registerSimpleEvent(domEventName: DOMEventName, reactName: string) {
   topLevelEventsToReactNames.set(domEventName, reactName);

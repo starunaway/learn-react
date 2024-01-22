@@ -8,14 +8,18 @@
 import ReactCurrentDispatcher from './ReactCurrentDispatcher';
 import ReactCurrentBatchConfig from './ReactCurrentBatchConfig';
 import ReactCurrentOwner from './ReactCurrentOwner';
+import { enableServerContext } from '../shared/ReactFeatureFlags';
 // import { ContextRegistry } from './ReactServerContextRegistry';
 
 const ReactSharedInternals = {
   ReactCurrentDispatcher,
   ReactCurrentBatchConfig,
   ReactCurrentOwner,
-  // fixme: 这里是 server 的 Context，应该和 client 无关
-  //   ContextRegistry,
 };
+
+if (enableServerContext) {
+  // fixme: 这里是 server 的 Context，应该和 client 无关
+  // (ReactSharedInternals as any).ContextRegistry = ContextRegistry;
+}
 
 export default ReactSharedInternals;

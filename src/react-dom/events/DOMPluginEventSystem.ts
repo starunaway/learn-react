@@ -1,10 +1,15 @@
 import { Fiber } from '../../react-reconciler/ReactInternalTypes';
 import { WorkTag } from '../../react-reconciler/ReactWorkTags';
 import { mixed } from '../../types';
-import { getClosestInstanceFromNode } from '../ReactDOMComponentTree';
+import { getClosestInstanceFromNode, getEventHandlerListeners } from '../ReactDOMComponentTree';
 import { DOMEventName } from './DOMEventNames';
 import { batchedUpdates } from './ReactDOMUpdateBatching';
 import getEventTarget from './getEventTarget';
+import {
+  enableLegacyFBSupport,
+  enableCreateEventHandleAPI,
+  enableScopeAPI,
+} from '../../shared/ReactFeatureFlags';
 
 import {
   addEventBubbleListener,
@@ -319,7 +324,8 @@ function addTrappedEventListener(
   targetContainer: EventTarget,
   domEventName: DOMEventName,
   eventSystemFlags: EventSystemFlags,
-  isCapturePhaseListener: boolean
+  isCapturePhaseListener: boolean,
+  isDeferredListenerForLegacyFBSupport?: boolean
 ) {
   let listener = createEventListenerWrapperWithPriority(
     targetContainer,
@@ -329,6 +335,12 @@ function addTrappedEventListener(
   // If passive option is not supported, then the event will be
   // active and not passive.
   let isPassiveListener = undefined;
+
+  targetContainer =
+    enableLegacyFBSupport && isDeferredListenerForLegacyFBSupport
+      ? (targetContainer as any).ownerDocument
+      : targetContainer;
+
   if (true) {
     // Browsers introduced an intervention, making these events
     // passive by default on document. React doesn't bind them
@@ -341,31 +353,33 @@ function addTrappedEventListener(
     }
   }
 
+  let unsubscribeListener;
+
   // TODO: There are too many combinations here. Consolidate them.
   // read: 确实，感觉可以合并一下参数列表，本质上都是调用的 addEventListener
   if (isCapturePhaseListener) {
     // 捕获阶段
     if (isPassiveListener !== undefined) {
-      addEventCaptureListenerWithPassiveFlag(
+      unsubscribeListener = addEventCaptureListenerWithPassiveFlag(
         targetContainer,
         domEventName,
         listener,
         isPassiveListener
       );
     } else {
-      addEventCaptureListener(targetContainer, domEventName, listener);
+      unsubscribeListener = addEventCaptureListener(targetContainer, domEventName, listener);
     }
   } else {
     // 冒泡阶段
     if (isPassiveListener !== undefined) {
-      addEventBubbleListenerWithPassiveFlag(
+      unsubscribeListener = addEventBubbleListenerWithPassiveFlag(
         targetContainer,
         domEventName,
         listener,
         isPassiveListener
       );
     } else {
-      addEventBubbleListener(targetContainer, domEventName, listener);
+      unsubscribeListener = addEventBubbleListener(targetContainer, domEventName, listener);
     }
   }
 }
@@ -570,6 +584,24 @@ export function accumulateSinglePhaseListeners(
     }
 
     instance = instance.return;
+  }
+  return listeners;
+}
+
+export function accumulateEventHandleNonManagedNodeListeners(
+  reactEventType: DOMEventName,
+  currentTarget: EventTarget,
+  inCapturePhase: boolean
+): Array<DispatchListener> {
+  const listeners: Array<DispatchListener> = [];
+
+  const eventListeners = getEventHandlerListeners(currentTarget);
+  if (eventListeners !== null) {
+    eventListeners.forEach((entry) => {
+      if (entry.type === reactEventType && entry.capture === inCapturePhase) {
+        listeners.push(createDispatchListener(null, entry.callback, currentTarget));
+      }
+    });
   }
   return listeners;
 }
