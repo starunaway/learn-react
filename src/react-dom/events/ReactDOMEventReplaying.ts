@@ -1,4 +1,4 @@
-import { EventPriority } from '../../react-reconciler/ReactEventPriorities';
+import { Lane } from '../../react-reconciler/ReactFiberLane';
 import { Fiber } from '../../react-reconciler/ReactInternalTypes';
 import { Container, SuspenseInstance } from '../ReactFiberHostConfig';
 import { DOMEventName } from './DOMEventNames';
@@ -186,14 +186,14 @@ export function setAttemptHydrationAtCurrentPriority(fn: (fiber: Fiber) => void)
   attemptHydrationAtCurrentPriority = fn;
 }
 
-let getCurrentUpdatePriority: () => EventPriority;
+let getCurrentUpdatePriority: () => Lane;
 
-export function setGetCurrentUpdatePriority(fn: () => EventPriority) {
+export function setGetCurrentUpdatePriority(fn: () => Lane) {
   getCurrentUpdatePriority = fn;
 }
 
-let attemptHydrationAtPriority: <T>(priority: EventPriority, fn: () => T) => T;
+let attemptHydrationAtPriority: <T>(priority: Lane, fn: () => T) => T;
 
-export function setAttemptHydrationAtPriority(fn: <T>(priority: EventPriority, fn: () => T) => T) {
+export function setAttemptHydrationAtPriority(fn: <T>(priority: Lane, fn: () => T) => T) {
   attemptHydrationAtPriority = fn;
 }

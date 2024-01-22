@@ -11,14 +11,7 @@ import {
 } from '../../react-reconciler/ReactFiberTreeReflection';
 import { Fiber, FiberRoot } from '../../react-reconciler/ReactInternalTypes';
 import { WorkTag } from '../../react-reconciler/ReactWorkTags';
-import {
-  IdlePriority,
-  ImmediatePriority,
-  LowPriority,
-  NormalPriority,
-  UserBlockingPriority,
-  getCurrentPriorityLevel,
-} from '../../react-reconciler/Scheduler';
+import { PriorityLevel, getCurrentPriorityLevel } from '../../react-reconciler/Scheduler';
 import ReactSharedInternals from '../../react/ReactSharedInternals';
 import { getClosestInstanceFromNode, getInstanceFromNode } from '../ReactDOMComponentTree';
 import { Container, SuspenseInstance } from '../ReactFiberHostConfig';
@@ -33,6 +26,7 @@ import {
   isDiscreteEventThatRequiresHydration,
   queueIfContinuousEvent,
 } from './ReactDOMEventReplaying';
+import { Lane } from '../../react-reconciler/ReactFiberLane';
 
 const { ReactCurrentBatchConfig } = ReactSharedInternals;
 
@@ -283,7 +277,7 @@ export function findInstanceBlockingEvent(
   return null;
 }
 
-export function getEventPriority(domEventName: DOMEventName): EventPriority {
+export function getEventPriority(domEventName: DOMEventName): Lane {
   switch (domEventName) {
     // Used by SimpleEventPlugin:
     case 'cancel':
@@ -373,15 +367,15 @@ export function getEventPriority(domEventName: DOMEventName): EventPriority {
       // read: message 事件可能出现在 postMessage，这个时候要根据调度的优先级来决定触发顺序
       const schedulerPriority = getCurrentPriorityLevel();
       switch (schedulerPriority) {
-        case ImmediatePriority:
+        case PriorityLevel.ImmediatePriority:
           return EventPriority.DiscreteEventPriority;
-        case UserBlockingPriority:
+        case PriorityLevel.UserBlockingPriority:
           return EventPriority.ContinuousEventPriority;
-        case NormalPriority:
-        case LowPriority:
+        case PriorityLevel.NormalPriority:
+        case PriorityLevel.LowPriority:
           // TODO: Handle LowSchedulerPriority, somehow. Maybe the same lane as hydration.
           return EventPriority.DefaultEventPriority;
-        case IdlePriority:
+        case PriorityLevel.IdlePriority:
           return EventPriority.IdleEventPriority;
         default:
           return EventPriority.DefaultEventPriority;

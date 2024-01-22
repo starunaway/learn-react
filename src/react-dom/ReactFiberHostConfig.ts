@@ -1,5 +1,9 @@
+import { EventPriority } from '../react-reconciler/ReactEventPriorities';
+import { Lane } from '../react-reconciler/ReactFiberLane';
 import { FiberRoot } from '../react-reconciler/ReactInternalTypes';
 import { mixed } from '../types';
+import { DOMEventName } from './events/DOMEventNames';
+import { getEventPriority } from './events/ReactDOMEventListener';
 
 export type Type = string;
 export type Props = {
@@ -79,3 +83,11 @@ export const noTimeout = -1;
 // -------------------
 
 export const supportsHydration = true;
+
+export function getCurrentEventPriority(): Lane {
+  const currentEvent = window.event;
+  if (currentEvent === undefined) {
+    return EventPriority.DefaultEventPriority;
+  }
+  return getEventPriority(currentEvent.type as DOMEventName);
+}
