@@ -1,3 +1,5 @@
+import { FiberRoot } from './ReactInternalTypes';
+
 export type Lanes = number;
 export type LaneMap<T> = Array<T>;
 
@@ -45,6 +47,7 @@ export enum Lane {
 export const NoLanes: Lanes = /*        */ 0b0000000000000000000000000000000;
 
 export const SomeRetryLane = Lane.RetryLane1;
+const TransitionLanes: Lanes = /*       */ 0b0000000001111111111111111000000;
 
 const NonIdleLanes: Lanes = /*          */ 0b0001111111111111111111111111111;
 
@@ -58,4 +61,73 @@ export function createLaneMap<T>(initial: T): LaneMap<T> {
     laneMap.push(initial);
   }
   return laneMap;
+}
+
+function pickArbitraryLaneIndex(lanes: Lanes) {
+  return 31 - Math.clz32(lanes);
+}
+
+export function includesSomeLane(a: Lanes | Lane, b: Lanes | Lane) {
+  return (a & b) !== NoLanes;
+}
+
+export function isSubsetOfLanes(set: Lanes, subset: Lanes | Lane) {
+  return (set & subset) === subset;
+}
+
+function laneToIndex(lane: Lane) {
+  return pickArbitraryLaneIndex(lane);
+}
+
+export function mergeLanes(a: Lanes | Lane, b: Lanes | Lane): Lanes {
+  return a | b;
+}
+
+export function intersectLanes(a: Lanes | Lane, b: Lanes | Lane): Lanes {
+  return a & b;
+}
+
+export function removeLanes(set: Lanes, subset: Lanes | Lane): Lanes {
+  return set & ~subset;
+}
+
+export function includesExpiredLane(root: FiberRoot, lanes: Lanes) {
+  // This is a separate check from includesBlockingLane because a lane can
+  // expire after a render has already started.
+  return (lanes & root.expiredLanes) !== NoLanes;
+}
+
+export function isTransitionLane(lane: Lane) {
+  return (lane & TransitionLanes) !== NoLanes;
+}
+
+export function markRootEntangled(root: FiberRoot, entangledLanes: Lanes) {
+  // In addition to entangling each of the given lanes with each other, we also
+  // have to consider _transitive_ entanglements. For each lane that is already
+  // entangled with *any* of the given lanes, that lane is now transitively
+  // entangled with *all* the given lanes.
+  //
+  // Translated: If C is entangled with A, then entangling A with B also
+  // entangles C with B.
+  //
+  // If this is hard to grasp, it might help to intentionally break this
+  // function and look at the tests that fail in ReactTransition-test.js. Try
+  // commenting out one of the conditions below.
+
+  const rootEntangledLanes = (root.entangledLanes |= entangledLanes);
+  const entanglements = root.entanglements;
+  let lanes = rootEntangledLanes;
+  while (lanes) {
+    const index = pickArbitraryLaneIndex(lanes);
+    const lane = 1 << index;
+    if (
+      // Is this one of the newly entangled lanes?
+      (lane & entangledLanes) |
+      // Is this lane transitively entangled with the newly entangled lanes?
+      (entanglements[index] & entangledLanes)
+    ) {
+      entanglements[index] |= entangledLanes;
+    }
+    lanes &= ~lane;
+  }
 }

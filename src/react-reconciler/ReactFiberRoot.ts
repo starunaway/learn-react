@@ -1,19 +1,34 @@
-import { Container, noTimeout } from '../react-dom/ReactFiberHostConfig';
+import { Container, noTimeout, supportsHydration } from '../react-dom/ReactFiberHostConfig';
 import { ReactNodeList } from '../shared/ReactTypes';
 import { mixed } from '../types';
 import type { Cache } from './ReactFiberCacheComponent';
-import { Lane, NoLanes, NoTimestamp, createLaneMap } from './ReactFiberLane';
+import {
+  Lane,
+  LaneMap,
+  Lanes,
+  NoLanes,
+  NoTimestamp,
+  TotalLanes,
+  createLaneMap,
+} from './ReactFiberLane';
 import type { PendingSuspenseBoundaries, Transition } from './ReactFiberTracingMarkerComponent';
 import { Fiber, FiberRoot, SuspenseHydrationCallbacks } from './ReactInternalTypes';
 import { RootTag } from './ReactRootTags';
 import { createHostRootFiber } from './ReactFiber';
 
 import { createCache, retainCache } from './ReactFiberCacheComponent';
+import {
+  enableCache,
+  enableProfilerCommitHooks,
+  enableProfilerTimer,
+  enableUpdaterTracking,
+} from '../shared/ReactFeatureFlags';
+import { initializeUpdateQueue } from './ReactFiberClassUpdateQueue';
 
 export type RootState = {
   element: any;
   isDehydrated: boolean;
-  cache: Cache;
+  cache: Cache | null;
   pendingSuspenseBoundaries: PendingSuspenseBoundaries | null;
   transitions: Set<Transition> | null;
 };
@@ -43,9 +58,14 @@ class FiberRootNode {
   entanglements: any;
   identifierPrefix: string;
   onRecoverableError: null | ((error: mixed) => void);
-  pooledCache: null;
-  pooledCacheLanes: number;
-  mutableSourceEagerHydrationData: null;
+  pooledCache: Cache | null | undefined;
+  pooledCacheLanes: Lanes | null | undefined;
+  // fixme: 暂时不支持
+  // mutableSourceEagerHydrationData: null;
+  memoizedUpdaters: Set<Fiber> | undefined;
+  pendingUpdatersLaneMap: LaneMap<Set<Fiber>> | undefined;
+  effectDuration: number | undefined;
+  passiveEffectDuration: number | undefined;
   constructor(
     containerInfo: Container,
     tag: RootTag,
@@ -80,10 +100,15 @@ class FiberRootNode {
     this.identifierPrefix = identifierPrefix;
     this.onRecoverableError = onRecoverableError;
 
-    this.pooledCache = null;
-    this.pooledCacheLanes = NoLanes;
+    if (enableCache) {
+      this.pooledCache = null;
+      this.pooledCacheLanes = NoLanes;
+    }
 
-    this.mutableSourceEagerHydrationData = null;
+    if (supportsHydration) {
+      // fixme:暂时不支持。和 ssr 相关，主要是类型不太对
+      // this.mutableSourceEagerHydrationData = null;
+    }
 
     // read: 这里不支持，所有对应的属性不存在，在其他的位置也需要注释掉
     // if (enableSuspenseCallback) {
@@ -98,6 +123,19 @@ class FiberRootNode {
     //     transitionLanesMap.push(null);
     //   }
     // }
+
+    if (enableProfilerTimer && enableProfilerCommitHooks) {
+      this.effectDuration = 0;
+      this.passiveEffectDuration = 0;
+    }
+
+    if (enableUpdaterTracking) {
+      this.memoizedUpdaters = new Set();
+      const pendingUpdatersLaneMap: LaneMap<Set<Fiber>> = (this.pendingUpdatersLaneMap = []);
+      for (let i = 0; i < TotalLanes; i++) {
+        pendingUpdatersLaneMap.push(new Set());
+      }
+    }
   }
 }
 
@@ -137,7 +175,7 @@ export function createFiberRoot(
   uninitializedFiber.stateNode = root;
 
   const initialCache = createCache();
-  retainCache(initialCache);
+  retainCache(initialCache!);
 
   // The pooledCache is a fresh cache instance that is used temporarily
   // for newly mounted boundaries during a render. In general, the
@@ -147,7 +185,7 @@ export function createFiberRoot(
   // cache is distinct from the main memoizedState.cache, it must be
   // retained separately.
   root.pooledCache = initialCache;
-  retainCache(initialCache);
+  retainCache(initialCache!);
   const initialState: RootState = {
     element: initialChildren,
     isDehydrated: hydrate,

@@ -2,7 +2,7 @@ import { mixed } from '../types';
 
 type JSXElementConstructor<P> = (props: P) => ReactNode;
 
-interface ReactElement<
+export interface ReactElement<
   P = any,
   // read:  T 可以是ReactText 类型？
   T extends string | JSXElementConstructor<any> = string | JSXElementConstructor<any>

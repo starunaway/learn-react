@@ -1,3 +1,4 @@
+import { enableCache } from '../shared/ReactFeatureFlags';
 import { mixed } from '../types';
 
 // In environments without AbortController (e.g. tests)
@@ -15,7 +16,10 @@ export type Cache = {
 // Creates a new empty Cache instance with a ref-count of 0. The caller is responsible
 // for retaining the cache once it is in use (retainCache), and releasing the cache
 // once it is no longer needed (releaseCache).
-export function createCache(): Cache {
+export function createCache(): Cache | null {
+  if (!enableCache) {
+    return null;
+  }
   const cache: Cache = {
     controller: new AbortController(),
     data: new Map(),
@@ -26,5 +30,8 @@ export function createCache(): Cache {
 }
 
 export function retainCache(cache: Cache) {
+  if (!enableCache) {
+    return;
+  }
   cache.refCount++;
 }

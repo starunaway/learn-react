@@ -11,6 +11,7 @@ import { RootTag } from './ReactRootTags';
 import { TypeOfMode } from './ReactTypeOfMode';
 import { WorkTag } from './ReactWorkTags';
 import type { Cache } from './ReactFiberCacheComponent';
+import { UpdateQueue } from './ReactFiberClassUpdateQueue';
 
 export type ContextDependency<T> = {
   context: ReactContext<T>;
@@ -23,7 +24,7 @@ export type Dependencies = {
 } & mixed;
 
 // be more than one per component.
-export type Fiber = {
+export type Fiber<Q extends mixed = any> = {
   // These first fields are conceptually members of an Instance. This used to
   // be split into a separate type and intersected with the other Fiber fields,
   // but until Flow fixes its intersection bugs, we've merged them into a
@@ -76,7 +77,7 @@ export type Fiber = {
   memoizedProps: any; // The props used to create the output.
 
   // A queue of state updates and callbacks.
-  updateQueue: mixed;
+  updateQueue: UpdateQueue<Q>;
 
   // The state used to create the output
   memoizedState: any;
@@ -160,7 +161,7 @@ type BaseFiberRootProperties = {
 
   // Used by useMutableSource hook to avoid tearing during hydration.
   // fixme:暂时不支持
-  //   mutableSourceEagerHydrationData?: Array<MutableSource<any> | MutableSourceVersion> | null;
+  // mutableSourceEagerHydrationData?: Array<MutableSource<any> | MutableSourceVersion> | null;
 
   // Node returned by Scheduler.scheduleCallback. Represents the next rendering
   // task that the root will work on.

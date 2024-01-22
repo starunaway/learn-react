@@ -1,8 +1,10 @@
 import { Container } from '../react-dom/ReactFiberHostConfig';
-import { ReactNodeList } from '../shared/ReactTypes';
+import { ReactElement, ReactNodeList } from '../shared/ReactTypes';
 import { Lane } from './ReactFiberLane';
 import { createFiberRoot } from './ReactFiberRoot';
-
+import { enableSchedulingProfiler } from '../shared/ReactFeatureFlags';
+import { get as getInstance } from '../shared/ReactInstanceMap';
+import { createUpdate, enqueueUpdate, entangleTransitions } from './ReactFiberClassUpdateQueue';
 import type {
   Fiber,
   FiberRoot,
@@ -26,6 +28,7 @@ import {
   discreteUpdates,
   flushPassiveEffects,
 } from './ReactFiberWorkLoop';
+import { emptyContextObject } from './ReactFiberContext';
 
 export {
   batchedUpdates,
@@ -62,11 +65,31 @@ export function createContainer(
   );
 }
 
+function getContextForSubtree(parentComponent?: any): Object {
+  if (!parentComponent) {
+    return emptyContextObject;
+  }
+  console.error('这里是渲染 ClassComponent ? FC 应该不会走到这里,如果需要的话要实现');
+  return emptyContextObject;
+
+  // const fiber = getInstance(parentComponent);
+  // const parentContext = findCurrentUnmaskedContext(fiber);
+
+  // if (fiber.tag === WorkTag.ClassComponent) {
+  // const Component = fiber.type;
+  // if (isLegacyContextProvider(Component)) {
+  //   return processChildContext(fiber, Component, parentContext);
+  // }
+  // }
+
+  // return parentContext;
+}
+
 export function updateContainer(
   element: ReactNodeList,
   container: FiberRoot,
   //   fixme: 18.2 版本都是 createRoot().render 和 FC，原来的 Legacy 和 ClassComponent 都不需要看，因此不需要在parentComponent参数
-  parentComponent?: null,
+  parentComponent?: ReactElement | null,
   callback?: Function | null
 ): Lane {
   const current = container.current;
@@ -94,7 +117,7 @@ export function updateContainer(
   if (root !== null) {
     console.log('这里是入口,react 更新从此处开始');
     console.log(
-      '如果是后续渲染,应该在其他地方，可以在合成事件 / setState/ useEffect 等事件内打断点'
+      '如果是后续渲染,代码应该在其他地方，可以在合成事件 / setState/ useEffect 等事件内打断点'
     );
     scheduleUpdateOnFiber(root, current, lane, eventTime);
     entangleTransitions(root, current, lane);
@@ -109,42 +132,47 @@ export function attemptHydrationAtCurrentPriority(fiber: Fiber): void {
     // their priority other than synchronously flush it.
     return;
   }
-  const lane = requestUpdateLane(fiber);
-  const root = enqueueConcurrentRenderForLane(fiber, lane);
-  if (root !== null) {
-    const eventTime = requestEventTime();
-    scheduleUpdateOnFiber(root, fiber, lane, eventTime);
-  }
-  markRetryLaneIfNotHydrated(fiber, lane);
+
+  // fixme: 这里的逻辑在需要时再实现
+  console.error('attemptHydrationAtCurrentPriority,这里的逻辑在需要时再实现', fiber);
+  // const lane = requestUpdateLane(fiber);
+  // const root = enqueueConcurrentRenderForLane(fiber, lane);
+  // if (root !== null) {
+  //   const eventTime = requestEventTime();
+  //   scheduleUpdateOnFiber(root, fiber, lane, eventTime);
+  // }
+  // markRetryLaneIfNotHydrated(fiber, lane);
 }
 
 export function attemptSynchronousHydration(fiber: Fiber): void {
-  switch (fiber.tag) {
-    case WorkTag.HostRoot: {
-      const root: FiberRoot = fiber.stateNode;
-      if (isRootDehydrated(root)) {
-        // Flush the first scheduled "update".
-        const lanes = getHighestPriorityPendingLanes(root);
-        flushRoot(root, lanes);
-      }
-      break;
-    }
-    case WorkTag.SuspenseComponent: {
-      flushSync(() => {
-        const root = enqueueConcurrentRenderForLane(fiber, Lane.SyncLane);
-        if (root !== null) {
-          const eventTime = requestEventTime();
-          scheduleUpdateOnFiber(root, fiber, Lane.SyncLane, eventTime);
-        }
-      });
-      // If we're still blocked after this, we need to increase
-      // the priority of any promises resolving within this
-      // boundary so that they next attempt also has higher pri.
-      const retryLane = Lane.SyncLane;
-      markRetryLaneIfNotHydrated(fiber, retryLane);
-      break;
-    }
-  }
+  // fixme: 这里的逻辑在需要时再实现
+  console.error('attemptSynchronousHydration,这里的逻辑在需要时再实现', fiber);
+  // switch (fiber.tag) {
+  //   case WorkTag.HostRoot: {
+  //     const root: FiberRoot = fiber.stateNode;
+  //     if (isRootDehydrated(root)) {
+  //       // Flush the first scheduled "update".
+  //       const lanes = getHighestPriorityPendingLanes(root);
+  //       flushRoot(root, lanes);
+  //     }
+  //     break;
+  //   }
+  //   case WorkTag.SuspenseComponent: {
+  //     flushSync(() => {
+  //       const root = enqueueConcurrentRenderForLane(fiber, Lane.SyncLane);
+  //       if (root !== null) {
+  //         const eventTime = requestEventTime();
+  //         scheduleUpdateOnFiber(root, fiber, Lane.SyncLane, eventTime);
+  //       }
+  //     });
+  //     // If we're still blocked after this, we need to increase
+  //     // the priority of any promises resolving within this
+  //     // boundary so that they next attempt also has higher pri.
+  //     const retryLane = Lane.SyncLane;
+  //     markRetryLaneIfNotHydrated(fiber, retryLane);
+  //     break;
+  //   }
+  // }
 }
 
 export function attemptContinuousHydration(fiber: Fiber): void {
@@ -155,13 +183,15 @@ export function attemptContinuousHydration(fiber: Fiber): void {
     // Suspense.
     return;
   }
-  const lane = Lane.SelectiveHydrationLane;
-  const root = enqueueConcurrentRenderForLane(fiber, lane);
-  if (root !== null) {
-    const eventTime = requestEventTime();
-    scheduleUpdateOnFiber(root, fiber, lane, eventTime);
-  }
-  markRetryLaneIfNotHydrated(fiber, lane);
+  // fixme: 这里的逻辑在需要时再实现
+  console.error('attemptContinuousHydration,这里的逻辑在需要时再实现', fiber);
+  // const lane = Lane.SelectiveHydrationLane;
+  // const root = enqueueConcurrentRenderForLane(fiber, lane);
+  // if (root !== null) {
+  //   const eventTime = requestEventTime();
+  //   scheduleUpdateOnFiber(root, fiber, lane, eventTime);
+  // }
+  // markRetryLaneIfNotHydrated(fiber, lane);
 }
 
 export function attemptDiscreteHydration(fiber: Fiber): void {
@@ -172,11 +202,13 @@ export function attemptDiscreteHydration(fiber: Fiber): void {
     // Suspense.
     return;
   }
-  const lane = Lane.SyncLane;
-  const root = enqueueConcurrentRenderForLane(fiber, lane);
-  if (root !== null) {
-    const eventTime = requestEventTime();
-    scheduleUpdateOnFiber(root, fiber, lane, eventTime);
-  }
-  markRetryLaneIfNotHydrated(fiber, lane);
+  // fixme: 这里的逻辑在需要时再实现
+  console.error('attemptDiscreteHydration,这里的逻辑在需要时再实现', fiber);
+  // const lane = Lane.SyncLane;
+  // const root = enqueueConcurrentRenderForLane(fiber, lane);
+  // if (root !== null) {
+  //   const eventTime = requestEventTime();
+  //   scheduleUpdateOnFiber(root, fiber, lane, eventTime);
+  // }
+  // markRetryLaneIfNotHydrated(fiber, lane);
 }
