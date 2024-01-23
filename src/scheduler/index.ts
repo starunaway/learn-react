@@ -88,6 +88,7 @@ function advanceTimers(currentTime: number) {
 
 /**
  * 任务超时
+ * 将一堆任务放到 settimeout 里面执行？
  * @param currentTime
  */
 function handleTimeout(currentTime: number) {
@@ -211,13 +212,18 @@ function unstable_wrapCallback(callback: Function) {
 }
 
 /**
- * 任务调度, 将一个个callback 包装成 Task 放入 Queue 中，并在浏览器空闲的时候执行
+ * 任务调度, 将一个个callback 包装成 Task 放入 Queue 中 ,根据优先级按需执行
+ * 业务侧不需要关心优先级是怎么调度的
  * @param priorityLevel
  * @param callback
  * @param options
  * @returns
  */
-function unstable_scheduleCallback(priorityLevel: PriorityLevel, callback: Function, options: any) {
+function unstable_scheduleCallback(
+  priorityLevel: PriorityLevel,
+  callback: Function,
+  options?: any
+) {
   var currentTime = getCurrentTime();
 
   // read: 计划什么时候开始执行

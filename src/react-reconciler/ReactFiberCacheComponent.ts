@@ -1,3 +1,4 @@
+import { PriorityLevel, scheduleCallback } from './Scheduler';
 import { enableCache } from '../shared/ReactFeatureFlags';
 import { mixed } from '../types';
 
@@ -34,4 +35,17 @@ export function retainCache(cache: Cache) {
     return;
   }
   cache.refCount++;
+}
+
+export function releaseCache(cache: Cache) {
+  if (!enableCache) {
+    return;
+  }
+  cache.refCount--;
+
+  if (cache.refCount === 0) {
+    scheduleCallback(PriorityLevel.NormalPriority, () => {
+      cache.controller.abort();
+    });
+  }
 }

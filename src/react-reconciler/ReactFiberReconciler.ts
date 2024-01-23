@@ -119,6 +119,7 @@ export function updateContainer(
     console.log(
       '如果是后续渲染,代码应该在其他地方，可以在合成事件 / setState/ useEffect 等事件内打断点'
     );
+    console.info('scheduleUpdateOnFiber 开始');
     scheduleUpdateOnFiber(root, current, lane, eventTime);
     entangleTransitions(root, current, lane);
   }

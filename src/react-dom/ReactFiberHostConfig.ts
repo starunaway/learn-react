@@ -91,3 +91,9 @@ export function getCurrentEventPriority(): Lane {
   }
   return getEventPriority(currentEvent.type as DOMEventName);
 }
+
+// -------------------
+//     Microtasks
+// -------------------
+export const supportsMicrotasks = true;
+export const scheduleMicrotask: any = queueMicrotask;
