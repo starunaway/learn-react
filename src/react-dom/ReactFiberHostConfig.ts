@@ -24,6 +24,11 @@ type TimeoutID = number;
 
 export type TimeoutHandle = TimeoutID;
 export type NoTimeout = -1;
+type HostContextProd = string;
+export type HostContext = HostContextProd;
+export type UpdatePayload = Array<mixed>;
+export type ChildSet = void; // Unused
+export type RendererInspectionConfig = Readonly<{}>;
 
 export type Instance = Element;
 export type TextInstance = Text;
@@ -75,6 +80,8 @@ export function getParentSuspenseInstance(targetInstance: Node): null | Suspense
   }
   return null;
 }
+
+export const isPrimaryRenderer = true;
 
 export const noTimeout = -1;
 

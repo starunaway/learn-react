@@ -176,6 +176,17 @@ export function includesBlockingLane(root: FiberRoot, lanes: Lanes) {
   return (lanes & SyncDefaultLanes) !== NoLanes;
 }
 
+export function getLanesToRetrySynchronouslyOnError(root: FiberRoot): Lanes {
+  const everythingButOffscreen = root.pendingLanes & ~Lane.OffscreenLane;
+  if (everythingButOffscreen !== NoLanes) {
+    return everythingButOffscreen;
+  }
+  if (everythingButOffscreen & Lane.OffscreenLane) {
+    return Lane.OffscreenLane;
+  }
+  return NoLanes;
+}
+
 export function isTransitionLane(lane: Lane) {
   return (lane & TransitionLanes) !== NoLanes;
 }
@@ -360,6 +371,29 @@ export function markRootSuspended(root: FiberRoot, suspendedLanes: Lanes) {
   }
 }
 
+export function getMostRecentEventTime(root: FiberRoot, lanes: Lanes): number {
+  const eventTimes = root.eventTimes;
+
+  let mostRecentEventTime = NoTimestamp;
+  while (lanes > 0) {
+    const index = pickArbitraryLaneIndex(lanes);
+    const lane = 1 << index;
+
+    const eventTime = eventTimes[index];
+    if (eventTime > mostRecentEventTime) {
+      mostRecentEventTime = eventTime;
+    }
+
+    lanes &= ~lane;
+  }
+
+  return mostRecentEventTime;
+}
+
+export function markRootPinged(root: FiberRoot, pingedLanes: Lanes, eventTime: number) {
+  root.pingedLanes |= root.suspendedLanes & pingedLanes;
+}
+
 export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
   // Early bailout if there's no pending work left.
   const pendingLanes = root.pendingLanes;
@@ -474,4 +508,8 @@ export function getNextLanes(root: FiberRoot, wipLanes: Lanes): Lanes {
   }
 
   return nextLanes;
+}
+
+export function getTransitionsForLanes(root: FiberRoot, lanes: Lane | Lanes): null {
+  return null;
 }

@@ -1,4 +1,6 @@
+import { mixed } from '../types';
 import { Lane, Lanes } from './ReactFiberLane';
+import type { HookFlags } from './ReactHookEffectTags';
 
 export type Update<S, A> = {
   lane: Lane;
@@ -15,4 +17,27 @@ export type UpdateQueue<S, A> = {
   dispatch: ((action: A) => any) | null;
   lastRenderedReducer: ((state: S, action: A) => S) | null;
   lastRenderedState: S | null;
+};
+
+export type Effect = {
+  tag: HookFlags;
+  create: () => (() => void) | void;
+  destroy: (() => void) | void;
+  deps: Array<mixed> | null;
+  next: Effect;
+};
+
+type StoreInstance<T> = {
+  value: T;
+  getSnapshot: () => T;
+};
+
+type StoreConsistencyCheck<T> = {
+  value: T;
+  getSnapshot: () => T;
+};
+
+export type FunctionComponentUpdateQueue = {
+  lastEffect: Effect | null;
+  stores: Array<StoreConsistencyCheck<any>> | null;
 };

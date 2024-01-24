@@ -1,5 +1,6 @@
 import {
   getCurrentEventPriority,
+  noTimeout,
   scheduleMicrotask,
   supportsMicrotasks,
 } from '../react-dom/ReactFiberHostConfig';
@@ -30,6 +31,7 @@ import {
   lowerEventPriority,
   setCurrentUpdatePriority,
 } from './ReactEventPriorities';
+import { isRootDehydrated } from './ReactFiberShellHydration';
 import { releaseCache } from './ReactFiberCacheComponent';
 import {
   Lane,
@@ -37,8 +39,17 @@ import {
   NoLanes,
   NoTimestamp,
   getHighestPriorityLane,
+  getLanesToRetrySynchronouslyOnError,
+  getMostRecentEventTime,
   getNextLanes,
+  getTransitionsForLanes,
+  includesBlockingLane,
+  includesExpiredLane,
+  includesOnlyRetries,
+  includesOnlyTransitions,
   includesSomeLane,
+  isSubsetOfLanes,
+  markRootPinged,
   markRootSuspended,
   markRootUpdated,
   markStarvedLanesAsExpired,
@@ -46,6 +57,8 @@ import {
   pickArbitraryLane,
 } from './ReactFiberLane';
 import { Transition } from './ReactFiberTracingMarkerComponent';
+import type { FunctionComponentUpdateQueue } from './ReactFiberHooks';
+
 import { NoTransition, requestCurrentTransition } from './ReactFiberTransition';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
 import { TypeOfMode } from './ReactTypeOfMode';
@@ -66,6 +79,15 @@ import {
 } from './ReactFiberSyncTaskQueue';
 
 import {
+  markNestedUpdateScheduled,
+  recordCommitTime,
+  resetNestedUpdateFlag,
+  startProfilerTimer,
+  stopProfilerTimerIfRunningAndRecordDelta,
+  syncNestedUpdateFlag,
+} from './ReactProfilerTimer';
+
+import {
   // Aliased because `act` will override and push to an internal queue
   scheduleCallback,
   shouldYield,
@@ -81,6 +103,10 @@ import {
 import { StackCursor, createCursor } from './ReactFiberStack';
 import { CapturedValue } from './ReactCapturedValue';
 import { RootTag } from './ReactRootTags';
+import { Wakeable } from '../shared/ReactTypes';
+import ReactCurrentOwner from '../react/ReactCurrentOwner';
+import { Flags } from './ReactFiberFlags';
+import { unwindInterruptedWork } from './ReactFiberUnwindWork';
 
 enum ExecutionContext {
   NoContext = /*                    */ 0b000,
@@ -478,6 +504,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 // This is the entry point for every concurrent task, i.e. anything that
 // goes through Scheduler.
 function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): null | any {
+  console.info('performConcurrentWorkOnRoot:Concurrent mode ');
   if (enableProfilerTimer && enableProfilerNestedUpdatePhase) {
     resetNestedUpdateFlag();
   }
@@ -535,6 +562,9 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
   let exitStatus = shouldTimeSlice
     ? renderRootConcurrent(root, lanes)
     : renderRootSync(root, lanes);
+  console.info('performConcurrentWorkOnRoot 内 renderRoot 已经完成 ，根据结果看后续操作');
+
+  console.info('exitStatus 不是RootInProgress,根据状态判断是否继续执行');
   if (exitStatus !== RootExitStatus.RootInProgress) {
     if (exitStatus === RootExitStatus.RootErrored) {
       // If something threw an error, try rendering one more time. We'll
@@ -566,7 +596,7 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
       markRootSuspended(root, lanes);
     } else {
       // The render completed.
-
+      console.info('renderRoot执行完成了!');
       // Check if this render may have yielded to a concurrent event, and if so,
       // confirm that any newly rendered stores are consistent.
       // TODO: It's possible that even a concurrent render may never have yielded
@@ -577,6 +607,7 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
       if (renderWasConcurrent && !isRenderConsistentWithExternalStores(finishedWork)) {
         // A store was mutated in an interleaved event. Render again,
         // synchronously, to block further mutations.
+        // read:当发生并发事件导致store状态改变时，重新同步渲染组件
         exitStatus = renderRootSync(root, lanes);
 
         // We need to check again if something threw
@@ -607,6 +638,7 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
   }
 
   ensureRootIsScheduled(root, now());
+  console.info('exitStatus 是RootInProgress,还需要再次执行');
   if (root.callbackNode === originalCallbackNode) {
     // The task node scheduled for this root is the same one that's
     // currently executed. Need to return a continuation.
@@ -615,8 +647,241 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
   return null;
 }
 
-// 1222
+// 962
+/**
+ * read: 按 renderRoot 的逻辑，在Concurrent模式下，如果失败了，转同步模式再试一次
+ * read: 和hydration有关 ？
+ * @param root
+ * @param errorRetryLanes
+ * @returns
+ */
+function recoverFromConcurrentError(root: FiberRoot, errorRetryLanes: Lanes) {
+  // If an error occurred during hydration, discard server response and fall
+  // back to client side render.
 
+  // Before rendering again, save the errors from the previous attempt.
+  const errorsFromFirstAttempt = workInProgressRootConcurrentErrors;
+
+  if (isRootDehydrated(root)) {
+    console.error('这里是和hydration有关的,客户端渲染应该到不了这里，先不看');
+    // The shell failed to hydrate. Set a flag to force a client rendering
+    // during the next attempt. To do this, we call prepareFreshStack now
+    // to create the root work-in-progress fiber. This is a bit weird in terms
+    // of factoring, because it relies on renderRootSync not calling
+    // prepareFreshStack again in the call below, which happens because the
+    // root and lanes haven't changed.
+    //
+    // TODO: I think what we should do is set ForceClientRender inside
+    // throwException, like we do for nested Suspense boundaries. The reason
+    // it's here instead is so we can switch to the synchronous work loop, too.
+    // Something to consider for a future refactor.
+    // fixme: 这里是和hydration有关的,如果走到了这里,需要实现
+    console.error('这里是和hydration有关的,如果走到了这里,需要实现下面两行');
+    // const rootWorkInProgress = prepareFreshStack(root, errorRetryLanes);
+    // rootWorkInProgress.flags |= ForceClientRender;
+  }
+
+  const exitStatus = renderRootSync(root, errorRetryLanes);
+  if (exitStatus !== RootExitStatus.RootErrored) {
+    // Successfully finished rendering on retry
+
+    // The errors from the failed first attempt have been recovered. Add
+    // them to the collection of recoverable errors. We'll log them in the
+    // commit phase.
+    const errorsFromSecondAttempt = workInProgressRootRecoverableErrors;
+    workInProgressRootRecoverableErrors = errorsFromFirstAttempt;
+    // The errors from the second attempt should be queued after the errors
+    // from the first attempt, to preserve the causal sequence.
+    if (errorsFromSecondAttempt !== null) {
+      queueRecoverableErrors(errorsFromSecondAttempt);
+    }
+  } else {
+    // The UI failed to recover.
+  }
+  return exitStatus;
+}
+
+// 1008
+export function queueRecoverableErrors(errors: Array<CapturedValue<mixed>>) {
+  if (workInProgressRootRecoverableErrors === null) {
+    workInProgressRootRecoverableErrors = errors;
+  } else {
+    workInProgressRootRecoverableErrors.push.apply(workInProgressRootRecoverableErrors, errors);
+  }
+}
+
+// 1018
+function finishConcurrentRender(root: FiberRoot, exitStatus: RootExitStatus, lanes: Lane) {
+  switch (exitStatus) {
+    case RootExitStatus.RootInProgress:
+    case RootExitStatus.RootFatalErrored: {
+      throw new Error('Root did not complete. This is a bug in React.');
+    }
+    // Flow knows about invariant, so it complains if I add a break
+    // statement, but eslint doesn't know about invariant, so it complains
+    // if I do. eslint-disable-next-line no-fallthrough
+    case RootExitStatus.RootErrored: {
+      // We should have already attempted to retry this tree. If we reached
+      // this point, it errored again. Commit it.
+      commitRoot(root, workInProgressRootRecoverableErrors, workInProgressTransitions);
+      break;
+    }
+    case RootExitStatus.RootSuspended: {
+      markRootSuspended(root, lanes);
+
+      // We have an acceptable loading state. We need to figure out if we
+      // should immediately commit it or wait a bit.
+
+      if (includesOnlyRetries(lanes)) {
+        // This render only included retries, no updates. Throttle committing
+        // retries so that we don't show too many loading states too quickly.
+        const msUntilTimeout = globalMostRecentFallbackTime + FALLBACK_THROTTLE_MS - now();
+        // Don't bother with a very short suspense time.
+        if (msUntilTimeout > 10) {
+          const nextLanes = getNextLanes(root, NoLanes);
+          if (nextLanes !== NoLanes) {
+            // There's additional work on this root.
+            break;
+          }
+          const suspendedLanes = root.suspendedLanes;
+          if (!isSubsetOfLanes(suspendedLanes, lanes)) {
+            // We should prefer to render the fallback of at the last
+            // suspended level. Ping the last suspended level to try
+            // rendering it again.
+            // FIXME: What if the suspended lanes are Idle? Should not restart.
+            const eventTime = requestEventTime();
+            markRootPinged(root, suspendedLanes, eventTime);
+            break;
+          }
+
+          // The render is suspended, it hasn't timed out, and there's no
+          // lower priority work to do. Instead of committing the fallback
+          // immediately, wait for more data to arrive.
+          // read: 如果有suspend的状态，就等会再次render。多处理点数据，避免重复渲染
+          root.timeoutHandle = setTimeout(
+            commitRoot.bind(
+              null,
+              root,
+              workInProgressRootRecoverableErrors,
+              workInProgressTransitions
+            ),
+            msUntilTimeout
+          ) as unknown as number;
+          break;
+        }
+      }
+      // The work expired. Commit immediately.
+      commitRoot(root, workInProgressRootRecoverableErrors, workInProgressTransitions);
+      break;
+    }
+    case RootExitStatus.RootSuspendedWithDelay: {
+      markRootSuspended(root, lanes);
+
+      if (includesOnlyTransitions(lanes)) {
+        // This is a transition, so we should exit without committing a
+        // placeholder and without scheduling a timeout. Delay indefinitely
+        // until we receive more data.
+        break;
+      }
+
+      // This is not a transition, but we did trigger an avoided state.
+      // Schedule a placeholder to display after a short delay, using the Just
+      // Noticeable Difference.
+      // TODO: Is the JND optimization worth the added complexity? If this is
+      // the only reason we track the event time, then probably not.
+      // Consider removing.
+
+      const mostRecentEventTime = getMostRecentEventTime(root, lanes);
+      const eventTimeMs = mostRecentEventTime;
+      const timeElapsedMs = now() - eventTimeMs;
+      const msUntilTimeout = jnd(timeElapsedMs) - timeElapsedMs;
+
+      // Don't bother with a very short suspense time.
+      if (msUntilTimeout > 10) {
+        // Instead of committing the fallback immediately, wait for more data
+        // to arrive.
+        root.timeoutHandle = setTimeout(
+          commitRoot.bind(
+            null,
+            root,
+            workInProgressRootRecoverableErrors,
+            workInProgressTransitions
+          ),
+          msUntilTimeout
+        ) as unknown as number;
+        break;
+      }
+
+      // Commit the placeholder.
+      commitRoot(root, workInProgressRootRecoverableErrors, workInProgressTransitions);
+      break;
+    }
+    case RootExitStatus.RootCompleted: {
+      // The work completed. Ready to commit.
+      commitRoot(root, workInProgressRootRecoverableErrors, workInProgressTransitions);
+      break;
+    }
+    default: {
+      throw new Error('Unknown root exit status.');
+    }
+  }
+}
+
+// 1157
+function isRenderConsistentWithExternalStores(finishedWork: Fiber): boolean {
+  // Search the rendered tree for external store reads, and check whether the
+  // stores were mutated in a concurrent event. Intentionally using an iterative
+  // loop instead of recursion so we can exit early.
+  let node: Fiber = finishedWork;
+  while (true) {
+    if (node.flags & Flags.StoreConsistency) {
+      // read:
+      const updateQueue: FunctionComponentUpdateQueue | null = node.updateQueue as any;
+      if (updateQueue !== null) {
+        const checks = updateQueue.stores;
+        if (checks !== null) {
+          for (let i = 0; i < checks.length; i++) {
+            const check = checks[i];
+            const getSnapshot = check.getSnapshot;
+            const renderedValue = check.value;
+            try {
+              if (!Object.is(getSnapshot(), renderedValue)) {
+                // Found an inconsistent store.
+                return false;
+              }
+            } catch (error) {
+              // If `getSnapshot` throws, return `false`. This will schedule
+              // a re-render, and the error will be rethrown during render.
+              return false;
+            }
+          }
+        }
+      }
+    }
+    const child = node.child;
+    if (node.subtreeFlags & Flags.StoreConsistency && child !== null) {
+      child.return = node;
+      node = child;
+      continue;
+    }
+    if (node === finishedWork) {
+      return true;
+    }
+    while (node.sibling === null) {
+      if (node.return === null || node.return === finishedWork) {
+        return true;
+      }
+      node = node.return;
+    }
+    node.sibling.return = node.return;
+    node = node.sibling;
+  }
+  // Flow doesn't know this is unreachable, but eslint does
+  // eslint-disable-next-line no-unreachable
+  return true;
+}
+
+// 1222
 // This is the entry point for synchronous tasks that don't go
 // through Scheduler
 function performSyncWorkOnRoot(root: FiberRoot) {
@@ -811,6 +1076,124 @@ export function flushControlled(fn: () => mixed): void {
   }
 }
 
+//1445
+function prepareFreshStack(root: FiberRoot, lanes: Lanes): Fiber {
+  root.finishedWork = null;
+  root.finishedLanes = NoLanes;
+
+  const timeoutHandle = root.timeoutHandle;
+  if (timeoutHandle !== noTimeout) {
+    // The root previous suspended and scheduled a timeout to commit a fallback
+    // state. Now that we have additional work, cancel the timeout.
+    root.timeoutHandle = noTimeout;
+    // $FlowFixMe Complains noTimeout is not a TimeoutID, despite the check above
+    clearTimeout(timeoutHandle);
+  }
+
+  if (workInProgress !== null) {
+    let interruptedWork = workInProgress.return;
+    while (interruptedWork !== null) {
+      const current = interruptedWork.alternate;
+      // read: 恢复中断之前的状态
+      unwindInterruptedWork(current, interruptedWork, workInProgressRootRenderLanes);
+      interruptedWork = interruptedWork.return;
+    }
+  }
+  workInProgressRoot = root;
+  const rootWorkInProgress = createWorkInProgress(root.current, null);
+  workInProgress = rootWorkInProgress;
+  workInProgressRootRenderLanes = subtreeRenderLanes = workInProgressRootIncludedLanes = lanes;
+  workInProgressRootExitStatus = RootExitStatus.RootInProgress;
+  workInProgressRootFatalError = null;
+  workInProgressRootSkippedLanes = NoLanes;
+  workInProgressRootInterleavedUpdatedLanes = NoLanes;
+  workInProgressRootRenderPhaseUpdatedLanes = NoLanes;
+  workInProgressRootPingedLanes = NoLanes;
+  workInProgressRootConcurrentErrors = null;
+  workInProgressRootRecoverableErrors = null;
+
+  finishQueueingConcurrentUpdates();
+
+  return rootWorkInProgress;
+}
+//1492
+function handleError(root: FiberRoot, thrownValue: any): void {
+  do {
+    let erroredWork = workInProgress;
+    try {
+      // Reset module-level state that was set during the render phase.
+      resetContextDependencies();
+      resetHooksAfterThrow();
+      // TODO: I found and added this missing line while investigating a
+      // separate issue. Write a regression test using string refs.
+      ReactCurrentOwner.current = null;
+
+      if (erroredWork === null || erroredWork.return === null) {
+        // Expected to be working on a non-root fiber. This is a fatal error
+        // because there's no ancestor that can handle it; the root is
+        // supposed to capture all errors that weren't caught by an error
+        // boundary.
+        workInProgressRootExitStatus = RootExitStatus.RootFatalErrored;
+        workInProgressRootFatalError = thrownValue;
+        // Set `workInProgress` to null. This represents advancing to the next
+        // sibling, or the parent if there are no siblings. But since the root
+        // has no siblings nor a parent, we set it to null. Usually this is
+        // handled by `completeUnitOfWork` or `unwindWork`, but since we're
+        // intentionally not calling those, we need set it here.
+        // TODO: Consider calling `unwindWork` to pop the contexts.
+        workInProgress = null;
+        return;
+      }
+
+      if (enableProfilerTimer && erroredWork.mode & TypeOfMode.ProfileMode) {
+        // Record the time spent rendering before an error was thrown. This
+        // avoids inaccurate Profiler durations in the case of a
+        // suspended render.
+        stopProfilerTimerIfRunningAndRecordDelta(erroredWork, true);
+      }
+
+      if (enableSchedulingProfiler) {
+        markComponentRenderStopped();
+
+        if (
+          thrownValue !== null &&
+          typeof thrownValue === 'object' &&
+          typeof thrownValue.then === 'function'
+        ) {
+          const wakeable: Wakeable = thrownValue;
+          markComponentSuspended(erroredWork, wakeable, workInProgressRootRenderLanes);
+        } else {
+          markComponentErrored(erroredWork, thrownValue, workInProgressRootRenderLanes);
+        }
+      }
+
+      throwException(
+        root,
+        erroredWork.return,
+        erroredWork,
+        thrownValue,
+        workInProgressRootRenderLanes
+      );
+      completeUnitOfWork(erroredWork);
+    } catch (yetAnotherThrownValue) {
+      // Something in the return path also threw.
+      thrownValue = yetAnotherThrownValue;
+      if (workInProgress === erroredWork && erroredWork !== null) {
+        // If this boundary has already errored, then we had trouble processing
+        // the error. Bubble it to the next boundary.
+        erroredWork = erroredWork.return;
+        workInProgress = erroredWork;
+      } else {
+        erroredWork = workInProgress;
+      }
+      continue;
+    }
+    // Return to the normal work loop.
+    return;
+  } while (true);
+}
+
+// 1658
 function renderRootSync(root: FiberRoot, lanes: Lanes) {
   const prevExecutionContext = executionContext;
   executionContext |= ExecutionContext.RenderContext;
@@ -857,6 +1240,61 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
   workInProgressRootRenderLanes = NoLanes;
 
   return workInProgressRootExitStatus;
+}
+
+// 1743
+function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
+  const prevExecutionContext = executionContext;
+  executionContext |= ExecutionContext.RenderContext;
+  const prevDispatcher = pushDispatcher();
+
+  // If the root or lanes have changed, throw out the existing stack
+  // and prepare a fresh one. Otherwise we'll continue where we left off.
+  if (workInProgressRoot !== root || workInProgressRootRenderLanes !== lanes) {
+    // read: 这里默认没有打开 Transition Trace, 始终都是 null
+    // read: 可能要看一下， 使用了 useTransiton hook 后，lane 也不关吗？
+    workInProgressTransitions = getTransitionsForLanes(root, lanes);
+    resetRenderTimer();
+    prepareFreshStack(root, lanes);
+  }
+
+  if (enableSchedulingProfiler) {
+    markRenderStarted(lanes);
+  }
+
+  do {
+    try {
+      workLoopConcurrent();
+      break;
+    } catch (thrownValue) {
+      handleError(root, thrownValue);
+    }
+  } while (true);
+  resetContextDependencies();
+
+  popDispatcher(prevDispatcher);
+  executionContext = prevExecutionContext;
+
+  // Check if the tree has completed.
+  if (workInProgress !== null) {
+    // Still work remaining.
+    if (enableSchedulingProfiler) {
+      markRenderYielded();
+    }
+    return RootExitStatus.RootInProgress;
+  } else {
+    // Completed the tree.
+    if (enableSchedulingProfiler) {
+      markRenderStopped();
+    }
+
+    // Set this to null to indicate there's no in-progress render.
+    workInProgressRoot = null;
+    workInProgressRootRenderLanes = NoLanes;
+
+    // Return the final exit status.
+    return workInProgressRootExitStatus;
+  }
 }
 
 // 2341
@@ -980,6 +1418,32 @@ function flushPassiveEffectsImpl() {
   }
 
   return true;
+}
+
+// 2749
+// Computes the next Just Noticeable Difference (JND) boundary.
+// The theory is that a person can't tell the difference between small differences in time.
+// Therefore, if we wait a bit longer than necessary that won't translate to a noticeable
+// difference in the experience. However, waiting for longer might mean that we can avoid
+// showing an intermediate loading state. The longer we have already waited, the harder it
+// is to tell small differences in time. Therefore, the longer we've already waited,
+// the longer we can wait additionally. At some point we have to give up though.
+// We pick a train model where the next boundary commits at a consistent schedule.
+// These particular numbers are vague estimates. We expect to adjust them based on research.
+function jnd(timeElapsed: number) {
+  return timeElapsed < 120
+    ? 120
+    : timeElapsed < 480
+    ? 480
+    : timeElapsed < 1080
+    ? 1080
+    : timeElapsed < 1920
+    ? 1920
+    : timeElapsed < 3000
+    ? 3000
+    : timeElapsed < 4320
+    ? 4320
+    : Math.ceil(timeElapsed / 1960) * 1960;
 }
 
 // 2774
