@@ -22,6 +22,8 @@ let includesLegacySyncCallbacks: boolean = false;
 let isFlushingSyncQueue: boolean = false;
 
 export function scheduleSyncCallback(callback: SchedulerCallback) {
+  console.log('ReactFiberSyncTaskQueue:scheduleSyncCallback 这里先将 callback 放入 queue');
+  console.log(' 应该是 performSyncWorkOnRoot');
   // Push this callback into an internal queue. We'll flush these either in
   // the next tick, or earlier if something calls `flushSyncCallbackQueue`.
   if (syncQueue === null) {
@@ -56,6 +58,8 @@ export function flushSyncCallbacksOnlyInLegacyMode() {
  * @returns
  */
 export function flushSyncCallbacks() {
+  console.log('ReactFiberSyncTaskQueue:flushSyncCallbacks 这里将 callback 拿出，执行');
+
   if (!isFlushingSyncQueue && syncQueue !== null) {
     // Prevent re-entrance.
     isFlushingSyncQueue = true;

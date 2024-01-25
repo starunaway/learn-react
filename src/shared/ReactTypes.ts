@@ -137,3 +137,7 @@ export type ReactScopeInstance = {
   containsNode(arg0: Object): boolean;
   getChildContextValues: <T>(context: ReactContext<T>) => Array<T>;
 };
+
+export type StartTransitionOptions = {
+  name?: string;
+};

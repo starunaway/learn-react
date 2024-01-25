@@ -121,6 +121,7 @@ export function updateContainer(
     );
     console.info('scheduleUpdateOnFiber 开始');
     scheduleUpdateOnFiber(root, current, lane, eventTime);
+    console.info('scheduleUpdateOnFiber 结束');
     entangleTransitions(root, current, lane);
   }
 

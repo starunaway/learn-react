@@ -46,7 +46,15 @@ export const MutationMask =
   Flags.Visibility;
 export const LayoutMask = Flags.Update | Flags.Callback | Flags.Ref | Flags.Visibility;
 
+// TODO: Split into PassiveMountMask and PassiveUnmountMask
+export const PassiveMask = Flags.Passive | Flags.ChildDeletion;
+
 export const BeforeMutationMask =
   // TODO: Remove Update flag from before mutation phase by re-landing Visibility
   // flag logic (see #20043)
   Flags.Update | Flags.Snapshot;
+
+// Union of tags that don't get reset on clones.
+// This allows certain concepts to persist without recalculating them,
+// e.g. whether a subtree contains passive effects or portals.
+export const StaticMask = Flags.LayoutStatic | Flags.PassiveStatic | Flags.RefStatic;

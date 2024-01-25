@@ -30,6 +30,32 @@ export function pushConcurrentUpdateQueue(queue: HookQueue<any, any> | ClassQueu
   }
 }
 
+export function finishQueueingConcurrentUpdates() {
+  // Transfer the interleaved updates onto the main queue. Each queue has a
+  // `pending` field and an `interleaved` field. When they are not null, they
+  // point to the last node in a circular linked list. We need to append the
+  // interleaved list to the end of the pending list by joining them into a
+  // single, circular list.
+  if (concurrentQueues !== null) {
+    for (let i = 0; i < concurrentQueues.length; i++) {
+      const queue = concurrentQueues[i];
+      const lastInterleavedUpdate = queue.interleaved;
+      if (lastInterleavedUpdate !== null) {
+        queue.interleaved = null;
+        const firstInterleavedUpdate = lastInterleavedUpdate.next;
+        const lastPendingUpdate = queue.pending;
+        if (lastPendingUpdate !== null) {
+          const firstPendingUpdate = lastPendingUpdate.next;
+          lastPendingUpdate.next = firstInterleavedUpdate;
+          lastInterleavedUpdate.next = firstPendingUpdate;
+        }
+        queue.pending = lastInterleavedUpdate;
+      }
+    }
+    concurrentQueues = null;
+  }
+}
+
 export function enqueueConcurrentClassUpdate<State>(
   fiber: Fiber,
   queue: ClassQueue<State>,

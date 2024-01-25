@@ -14,7 +14,7 @@ import { pushProvider, popProvider } from './ReactFiberNewContext';
 
 export type Cache = {
   controller: AbortController;
-  data: Map<() => mixed, mixed>;
+  data: Map<() => any, any>;
   refCount: number;
 };
 
