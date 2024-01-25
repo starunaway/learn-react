@@ -4,6 +4,7 @@ import { FiberRoot } from '../react-reconciler/ReactInternalTypes';
 import { mixed } from '../types';
 import { DOMEventName } from './events/DOMEventNames';
 import { getEventPriority } from './events/ReactDOMEventListener';
+import { getChildNamespace } from './shared/DOMNamespaces';
 
 export type Type = string;
 export type Props = {
@@ -31,6 +32,8 @@ export type ChildSet = void; // Unused
 export type RendererInspectionConfig = Readonly<{}>;
 
 export type Instance = Element;
+export type HydratableInstance = Instance | TextInstance | SuspenseInstance;
+
 export type TextInstance = Text;
 /**
  *  read: 此 Suspense 不是 用于用户体验的 Suspense
@@ -79,6 +82,40 @@ export function getParentSuspenseInstance(targetInstance: Node): null | Suspense
     node = node.previousSibling as Comment;
   }
   return null;
+}
+
+export function getChildHostContext(
+  parentHostContext: HostContext,
+  type: string,
+  rootContainerInstance: Container
+): HostContext {
+  const parentNamespace = parentHostContext as HostContextProd;
+  return getChildNamespace(parentNamespace, type);
+}
+
+export function getRootHostContext(rootContainerInstance: Container): HostContext {
+  let type;
+  let namespace;
+  const nodeType = rootContainerInstance.nodeType;
+  switch (nodeType) {
+    case Node.DOCUMENT_NODE:
+    case Node.DOCUMENT_FRAGMENT_NODE: {
+      type = nodeType === Node.DOCUMENT_NODE ? '#document' : '#fragment';
+      const root = rootContainerInstance.documentElement;
+      namespace = root ? root.namespaceURI : getChildNamespace(null, '');
+      break;
+    }
+    default: {
+      const container: any =
+        nodeType === Node.COMMENT_NODE ? rootContainerInstance.parentNode : rootContainerInstance;
+      const ownNamespace = container.namespaceURI || null;
+      type = container.tagName;
+      namespace = getChildNamespace(ownNamespace, type);
+      break;
+    }
+  }
+
+  return namespace;
 }
 
 export const isPrimaryRenderer = true;

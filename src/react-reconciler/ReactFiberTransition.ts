@@ -18,3 +18,14 @@ export function popRootTransition(...args: any[]) {
   if (enableTransitionTracing) {
   }
 }
+
+/**
+ * @deprecated 特性并不支持，可以删了
+ * @param workInProgress
+ * @param root
+ * @param renderLanes
+ */
+export function pushRootTransition(...args: any[]) {
+  if (enableTransitionTracing) {
+  }
+}

@@ -120,11 +120,19 @@ function startPassiveEffectTimer(): void {
   //   passiveEffectStartTime = now();
 }
 
+function stopProfilerTimerIfRunning(fiber: Fiber): void {
+  if (!enableProfilerTimer) {
+    return;
+  }
+  profilerStartTime = -1;
+}
+
 export {
   resetNestedUpdateFlag,
   startProfilerTimer,
   syncNestedUpdateFlag,
   startPassiveEffectTimer,
   recordPassiveEffectDuration,
+  stopProfilerTimerIfRunning,
   stopProfilerTimerIfRunningAndRecordDelta,
 };

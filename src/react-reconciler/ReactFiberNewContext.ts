@@ -6,7 +6,9 @@ import { createCursor, push, pop } from './ReactFiberStack';
 import { isPrimaryRenderer } from '../react-dom/ReactFiberHostConfig';
 import { enableLazyContextPropagation, enableServerContext } from '../shared/ReactFeatureFlags';
 import { mixed } from '../types';
-import { NoLanes } from './ReactFiberLane';
+import { Lanes, NoLanes } from './ReactFiberLane';
+import { Flags } from './ReactFiberFlags';
+import { WorkTag } from './ReactWorkTags';
 
 const valueCursor: StackCursor<any> = createCursor<any>(null);
 
@@ -107,4 +109,101 @@ export function readContext<T>(context: ReactContext<T>): T | null {
     }
   }
   return value;
+}
+
+// read:将父级上下文的变更向下传播给它们的子级
+function propagateParentContextChanges(
+  current: Fiber,
+  workInProgress: Fiber,
+  renderLanes: Lanes,
+  forcePropagateEntireTree: boolean
+) {
+  // read: 这里没有开启特性，直接跳过去了
+  if (!enableLazyContextPropagation) {
+    return;
+  }
+
+  /*
+  // Collect all the parent providers that changed. Since this is usually small
+  // number, we use an Array instead of Set.
+  let contexts = null;
+  let parent = workInProgress;
+  let isInsidePropagationBailout = false;
+  while (parent !== null) {
+    if (!isInsidePropagationBailout) {
+      if ((parent.flags & Flags.NeedsPropagation) !== Flags.NoFlags) {
+        isInsidePropagationBailout = true;
+      } else if ((parent.flags & Flags.DidPropagateContext) !== Flags.NoFlags) {
+        break;
+      }
+    }
+
+    if (parent.tag === WorkTag.ContextProvider) {
+      const currentParent = parent.alternate;
+
+      if (currentParent === null) {
+        throw new Error('Should have a current fiber. This is a bug in React.');
+      }
+
+      const oldProps = currentParent.memoizedProps;
+      if (oldProps !== null) {
+        const providerType: ReactProviderType<any> = parent.type;
+        const context: ReactContext<any> = providerType._context;
+
+        const newProps = parent.pendingProps;
+        const newValue = newProps.value;
+
+        const oldValue = oldProps.value;
+
+        if (!Object.is(newValue, oldValue)) {
+          if (contexts !== null) {
+            contexts.push(context);
+          } else {
+            contexts = [context];
+          }
+        }
+      }
+    }
+    parent = parent.return;
+  }
+  // read 找到所有父级变化的 context
+  if (contexts !== null) {
+    // If there were any changed providers, search through the children and
+    // propagate their changes.
+    // read: propagate(传播到所有的子级)
+    propagateContextChanges(workInProgress, contexts, renderLanes, forcePropagateEntireTree);
+  }
+
+  // This is an optimization so that we only propagate once per subtree. If a
+  // deeply nested child bails out, and it calls this propagation function, it
+  // uses this flag to know that the remaining ancestor providers have already
+  // been propagated.
+  //
+  // NOTE: This optimization is only necessary because we sometimes enter the
+  // begin phase of nodes that don't have any work scheduled on them —
+  // specifically, the siblings of a node that _does_ have scheduled work. The
+  // siblings will bail out and call this function again, even though we already
+  // propagated content changes to it and its subtree. So we use this flag to
+  // mark that the parent providers already propagated.
+  //
+  // Unfortunately, though, we need to ignore this flag when we're inside a
+  // tree whose context propagation was deferred — that's what the
+  // `NeedsPropagation` flag is for.
+  //
+  // If we could instead bail out before entering the siblings' begin phase,
+  // then we could remove both `DidPropagateContext` and `NeedsPropagation`.
+  // Consider this as part of the next refactor to the fiber tree structure.
+  workInProgress.flags |= Flags.DidPropagateContext;
+
+
+  */
+}
+
+export function lazilyPropagateParentContextChanges(
+  current: Fiber,
+  workInProgress: Fiber,
+  renderLanes: Lanes
+) {
+  const forcePropagateEntireTree = false;
+  propagateParentContextChanges(current, workInProgress, renderLanes, forcePropagateEntireTree);
 }

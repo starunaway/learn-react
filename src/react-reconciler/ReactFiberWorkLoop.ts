@@ -117,6 +117,7 @@ import { WorkTag } from './ReactWorkTags';
 import { enqueueUpdate } from './ReactFiberClassUpdateQueue';
 import { throwException } from './ReactFiberThrow';
 import { completeWork } from './ReactFiberCompleteWork';
+import { beginWork } from './ReactFiberBeginWork';
 
 enum ExecutionContext {
   NoContext = /*                    */ 0b000,
@@ -410,6 +411,7 @@ export function isUnsafeClassRenderPhaseUpdate(fiber: Fiber) {
 // root has work on. This function is called on every update, and right before
 // exiting a task.
 function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
+  console.log('ensureRootIsScheduled:确保FiberRoot已经被更新过');
   const existingCallbackNode = root.callbackNode;
 
   // Check if any lanes are being starved by other work. If so, mark them as
@@ -539,6 +541,9 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
   // Flush any pending passive effects before deciding which lanes to work on,
   // in case they schedule additional work.
   const originalCallbackNode = root.callbackNode;
+  console.log(
+    'performConcurrentWorkOnRoot: root.callbackNode 会在更新后被处理，和原始的不一样。如果一样,说明还需要处理'
+  );
   const didFlushPassiveEffects = flushPassiveEffects();
   if (didFlushPassiveEffects) {
     // Something in the passive effect phase may have canceled the current task.
@@ -1236,6 +1241,14 @@ function popDispatcher(prevDispatcher: Dispatcher) {
   ReactCurrentDispatcher.current = prevDispatcher;
 }
 
+export function markCommitTimeOfFallback() {
+  globalMostRecentFallbackTime = now();
+}
+// 1599
+export function markSkippedUpdateLanes(lane: Lane | Lanes): void {
+  workInProgressRootSkippedLanes = mergeLanes(lane, workInProgressRootSkippedLanes);
+}
+
 // 1658
 function renderRootSync(root: FiberRoot, lanes: Lanes) {
   const prevExecutionContext = executionContext;
@@ -1366,7 +1379,29 @@ function workLoopConcurrent() {
 
 // 1831
 function performUnitOfWork(unitOfWork: Fiber): void {
-  console.error(' performUnitOfWork，需要实现');
+  // The current, flushed, state of this fiber is the alternate. Ideally
+  // nothing should rely on this, but relying on it here means that we don't
+  // need an additional field on the work in progress.
+  const current = unitOfWork.alternate;
+
+  let next;
+  if (enableProfilerTimer && (unitOfWork.mode & TypeOfMode.ProfileMode) !== TypeOfMode.NoMode) {
+    startProfilerTimer(unitOfWork);
+    next = beginWork(current, unitOfWork, subtreeRenderLanes);
+    stopProfilerTimerIfRunningAndRecordDelta(unitOfWork, true);
+  } else {
+    next = beginWork(current, unitOfWork, subtreeRenderLanes);
+  }
+
+  unitOfWork.memoizedProps = unitOfWork.pendingProps;
+  if (next === null) {
+    // If this doesn't spawn new work, complete the current work.
+    completeUnitOfWork(unitOfWork);
+  } else {
+    workInProgress = next;
+  }
+
+  ReactCurrentOwner.current = null;
 }
 // 1859
 function completeUnitOfWork(unitOfWork: Fiber): void {
