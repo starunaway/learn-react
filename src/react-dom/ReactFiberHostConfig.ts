@@ -104,3 +104,4 @@ export function getCurrentEventPriority(): Lane {
 // -------------------
 export const supportsMicrotasks = true;
 export const scheduleMicrotask: any = queueMicrotask;
+export { detachDeletedInstance } from './ReactDOMComponentTree';

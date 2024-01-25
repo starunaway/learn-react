@@ -11,6 +11,118 @@ import { popRootTransition } from './ReactFiberTransition';
 import { popTopLevelContextObject as popTopLevelLegacyContextObject } from './ReactFiberContext';
 import { resetWorkInProgressVersions as resetMutableSourceWorkInProgressVersions } from './ReactMutableSource';
 import type { Cache } from './ReactFiberCacheComponent';
+import { Flags } from './ReactFiberFlags';
+
+function unwindWork(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes) {
+  // Note: This intentionally doesn't check if we're hydrating because comparing
+  // to the current tree provider fiber is just as fast and less error-prone.
+  // Ideally we would have a special version of the work loop only
+  // for hydration.
+  popTreeContext(workInProgress);
+  switch (workInProgress.tag) {
+    case WorkTag.ClassComponent: {
+      console.error('WorkTag.ClassComponent  逻辑待实现');
+
+      //   const Component = workInProgress.type;
+      //   if (isLegacyContextProvider(Component)) {
+      //     popLegacyContext(workInProgress);
+      //   }
+      //   const flags = workInProgress.flags;
+      //   if (flags & ShouldCapture) {
+      //     workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
+      //     if (enableProfilerTimer && (workInProgress.mode & ProfileMode) !== NoMode) {
+      //       transferActualDuration(workInProgress);
+      //     }
+      //     return workInProgress;
+      //   }
+      return null;
+    }
+    case WorkTag.HostRoot: {
+      const root: FiberRoot = workInProgress.stateNode;
+      if (enableCache) {
+        const cache: Cache = workInProgress.memoizedState.cache;
+        popCacheProvider(workInProgress, cache);
+      }
+      popRootTransition(workInProgress, root, renderLanes);
+      popHostContainer(workInProgress);
+      popTopLevelLegacyContextObject(workInProgress);
+      resetMutableSourceWorkInProgressVersions();
+      const flags = workInProgress.flags;
+      if (
+        (flags & Flags.ShouldCapture) !== Flags.NoFlags &&
+        (flags & Flags.DidCapture) === Flags.NoFlags
+      ) {
+        // There was an error during render that wasn't captured by a suspense
+        // boundary. Do a second pass on the root to unmount the children.
+        workInProgress.flags = (flags & ~Flags.ShouldCapture) | Flags.DidCapture;
+        return workInProgress;
+      }
+      // We unwound to the root without completing it. Exit.
+      return null;
+    }
+    case WorkTag.HostComponent: {
+      // TODO: popHydrationState
+      popHostContext(workInProgress);
+      return null;
+    }
+    case WorkTag.SuspenseComponent: {
+      console.error('WorkTag.SuspenseComponent  逻辑待实现');
+
+      //   popSuspenseContext(workInProgress);
+      //   const suspenseState: null | SuspenseState = workInProgress.memoizedState;
+      //   if (suspenseState !== null && suspenseState.dehydrated !== null) {
+      //     if (workInProgress.alternate === null) {
+      //       throw new Error(
+      //         'Threw in newly mounted dehydrated component. This is likely a bug in ' +
+      //           'React. Please file an issue.'
+      //       );
+      //     }
+
+      //     resetHydrationState();
+      //   }
+
+      //   const flags = workInProgress.flags;
+      //   if (flags & ShouldCapture) {
+      //     workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
+      //     // Captured a suspense effect. Re-render the boundary.
+      //     if (enableProfilerTimer && (workInProgress.mode & ProfileMode) !== NoMode) {
+      //       transferActualDuration(workInProgress);
+      //     }
+      //     return workInProgress;
+      //   }
+      return null;
+    }
+    case WorkTag.SuspenseListComponent: {
+      console.error('WorkTag.SuspenseListComponent  逻辑待实现');
+
+      //   popSuspenseContext(workInProgress);
+      // SuspenseList doesn't actually catch anything. It should've been
+      // caught by a nested boundary. If not, it should bubble through.
+      return null;
+    }
+    case WorkTag.HostPortal:
+      popHostContainer(workInProgress);
+      return null;
+    case WorkTag.ContextProvider:
+      const context: ReactContext<any> = workInProgress.type._context;
+      popProvider(context, workInProgress);
+      return null;
+    case WorkTag.OffscreenComponent:
+    case WorkTag.LegacyHiddenComponent:
+      console.error('WorkTag.OffscreenComponent WorkTag.LegacyHiddenComponent 逻辑待实现');
+      //   popRenderLanes(workInProgress);
+      //   popTransition(workInProgress, current);
+      return null;
+    case WorkTag.CacheComponent:
+      if (enableCache) {
+        const cache: Cache = workInProgress.memoizedState.cache;
+        popCacheProvider(workInProgress, cache);
+      }
+      return null;
+    default:
+      return null;
+  }
+}
 
 /**
  * 处理中断的工作
@@ -92,4 +204,4 @@ function unwindInterruptedWork(current: Fiber | null, interruptedWork: Fiber, re
   }
 }
 
-export { unwindInterruptedWork };
+export { unwindInterruptedWork, unwindWork };

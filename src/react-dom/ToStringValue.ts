@@ -7,7 +7,6 @@ export type ToStringValue = boolean | number | Object | string | null | void;
 // passing the value through getToStringValue first.
 export function toString(value: ToStringValue): string {
   // The coercion safety check is performed in getToStringValue().
-  // eslint-disable-next-line react-internal/safe-string-coercion
   return '' + value;
 }
 

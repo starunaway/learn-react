@@ -57,7 +57,11 @@ import {
   pickArbitraryLane,
 } from './ReactFiberLane';
 import { Transition } from './ReactFiberTracingMarkerComponent';
-import { ContextOnlyDispatcher, type FunctionComponentUpdateQueue } from './ReactFiberHooks';
+import {
+  ContextOnlyDispatcher,
+  resetHooksAfterThrow,
+  type FunctionComponentUpdateQueue,
+} from './ReactFiberHooks';
 
 import { NoTransition, requestCurrentTransition } from './ReactFiberTransition';
 import { Dispatcher, Fiber, FiberRoot } from './ReactInternalTypes';
@@ -77,7 +81,12 @@ import {
   scheduleSyncCallback,
 } from './ReactFiberSyncTaskQueue';
 
-import { resetNestedUpdateFlag, syncNestedUpdateFlag } from './ReactProfilerTimer';
+import {
+  resetNestedUpdateFlag,
+  startProfilerTimer,
+  stopProfilerTimerIfRunningAndRecordDelta,
+  syncNestedUpdateFlag,
+} from './ReactProfilerTimer';
 
 import {
   // Aliased because `act` will override and push to an internal queue
@@ -99,13 +108,15 @@ import { RootTag } from './ReactRootTags';
 import { Wakeable } from '../shared/ReactTypes';
 import ReactCurrentOwner from '../react/ReactCurrentOwner';
 import { Flags } from './ReactFiberFlags';
-import { unwindInterruptedWork } from './ReactFiberUnwindWork';
+import { unwindInterruptedWork, unwindWork } from './ReactFiberUnwindWork';
 import { createWorkInProgress } from './ReactFiber';
 import ReactCurrentDispatcher from '../react/ReactCurrentDispatcher';
 import { read } from 'fs';
 import { resetContextDependencies } from './ReactFiberNewContext';
 import { WorkTag } from './ReactWorkTags';
 import { enqueueUpdate } from './ReactFiberClassUpdateQueue';
+import { throwException } from './ReactFiberThrow';
+import { completeWork } from './ReactFiberCompleteWork';
 
 enum ExecutionContext {
   NoContext = /*                    */ 0b000,
@@ -410,6 +421,8 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
     root,
     root === workInProgressRoot ? workInProgressRootRenderLanes : NoLanes
   );
+
+  console.log('根据 lane判断进入哪种更新模式');
 
   if (nextLanes === NoLanes) {
     // Special case: There's nothing to work on.
@@ -1120,82 +1133,89 @@ function prepareFreshStack(root: FiberRoot, lanes: Lanes): Fiber {
   return rootWorkInProgress;
 }
 //1492
-//read: 展示不关注报错处理，后续再看
-// function handleError(root: FiberRoot, thrownValue: any): void {
-//   do {
-//     let erroredWork = workInProgress;
-//     try {
-//       // Reset module-level state that was set during the render phase.
-//       resetContextDependencies();
-//       resetHooksAfterThrow();
-//       // TODO: I found and added this missing line while investigating a
-//       // separate issue. Write a regression test using string refs.
-//       ReactCurrentOwner.current = null;
+// read: 处理 workloop 的错误
+function handleError(root: FiberRoot, thrownValue: any): void {
+  do {
+    let erroredWork = workInProgress;
+    try {
+      // Reset module-level state that was set during the render phase.
+      resetContextDependencies();
+      resetHooksAfterThrow();
+      // TODO: I found and added this missing line while investigating a
+      // separate issue. Write a regression test using string refs.
+      ReactCurrentOwner.current = null;
 
-//       if (erroredWork === null || erroredWork.return === null) {
-//         // Expected to be working on a non-root fiber. This is a fatal error
-//         // because there's no ancestor that can handle it; the root is
-//         // supposed to capture all errors that weren't caught by an error
-//         // boundary.
-//         workInProgressRootExitStatus = RootExitStatus.RootFatalErrored;
-//         workInProgressRootFatalError = thrownValue;
-//         // Set `workInProgress` to null. This represents advancing to the next
-//         // sibling, or the parent if there are no siblings. But since the root
-//         // has no siblings nor a parent, we set it to null. Usually this is
-//         // handled by `completeUnitOfWork` or `unwindWork`, but since we're
-//         // intentionally not calling those, we need set it here.
-//         // TODO: Consider calling `unwindWork` to pop the contexts.
-//         workInProgress = null;
-//         return;
-//       }
+      if (erroredWork === null || erroredWork.return === null) {
+        // Expected to be working on a non-root fiber. This is a fatal error
+        // because there's no ancestor that can handle it; the root is
+        // supposed to capture all errors that weren't caught by an error
+        // boundary.
+        workInProgressRootExitStatus = RootExitStatus.RootFatalErrored;
+        workInProgressRootFatalError = thrownValue;
+        // Set `workInProgress` to null. This represents advancing to the next
+        // sibling, or the parent if there are no siblings. But since the root
+        // has no siblings nor a parent, we set it to null. Usually this is
+        // handled by `completeUnitOfWork` or `unwindWork`, but since we're
+        // intentionally not calling those, we need set it here.
+        // TODO: Consider calling `unwindWork` to pop the contexts.
+        workInProgress = null;
+        return;
+      }
 
-//       if (enableProfilerTimer && erroredWork.mode & TypeOfMode.ProfileMode) {
-//         // Record the time spent rendering before an error was thrown. This
-//         // avoids inaccurate Profiler durations in the case of a
-//         // suspended render.
-//         stopProfilerTimerIfRunningAndRecordDelta(erroredWork, true);
-//       }
+      if (enableProfilerTimer && erroredWork.mode & TypeOfMode.ProfileMode) {
+        // Record the time spent rendering before an error was thrown. This
+        // avoids inaccurate Profiler durations in the case of a
+        // suspended render.
+        stopProfilerTimerIfRunningAndRecordDelta(erroredWork, true);
+      }
 
-//       if (enableSchedulingProfiler) {
-//         markComponentRenderStopped();
+      if (enableSchedulingProfiler) {
+        // read: devtool 用到的
+        // markComponentRenderStopped();
 
-//         if (
-//           thrownValue !== null &&
-//           typeof thrownValue === 'object' &&
-//           typeof thrownValue.then === 'function'
-//         ) {
-//           const wakeable: Wakeable = thrownValue;
-//           markComponentSuspended(erroredWork, wakeable, workInProgressRootRenderLanes);
-//         } else {
-//           markComponentErrored(erroredWork, thrownValue, workInProgressRootRenderLanes);
-//         }
-//       }
+        if (
+          thrownValue !== null &&
+          typeof thrownValue === 'object' &&
+          typeof thrownValue.then === 'function'
+        ) {
+          // read: devtool 用到的
+          // const wakeable: Wakeable = (thrownValue );
+          // markComponentSuspended(
+          //   erroredWork,
+          //   wakeable,
+          //   workInProgressRootRenderLanes,
+          // );
+        } else {
+          // read: devtool 用到的
+          // markComponentErrored(erroredWork, thrownValue, workInProgressRootRenderLanes);
+        }
+      }
 
-//       throwException(
-//         root,
-//         erroredWork.return,
-//         erroredWork,
-//         thrownValue,
-//         workInProgressRootRenderLanes
-//       );
-//       completeUnitOfWork(erroredWork);
-//     } catch (yetAnotherThrownValue) {
-//       // Something in the return path also threw.
-//       thrownValue = yetAnotherThrownValue;
-//       if (workInProgress === erroredWork && erroredWork !== null) {
-//         // If this boundary has already errored, then we had trouble processing
-//         // the error. Bubble it to the next boundary.
-//         erroredWork = erroredWork.return;
-//         workInProgress = erroredWork;
-//       } else {
-//         erroredWork = workInProgress;
-//       }
-//       continue;
-//     }
-//     // Return to the normal work loop.
-//     return;
-//   } while (true);
-// }
+      throwException(
+        root,
+        erroredWork.return,
+        erroredWork,
+        thrownValue,
+        workInProgressRootRenderLanes
+      );
+      completeUnitOfWork(erroredWork);
+    } catch (yetAnotherThrownValue) {
+      // Something in the return path also threw.
+      thrownValue = yetAnotherThrownValue;
+      if (workInProgress === erroredWork && erroredWork !== null) {
+        // If this boundary has already errored, then we had trouble processing
+        // the error. Bubble it to the next boundary.
+        erroredWork = erroredWork.return;
+        workInProgress = erroredWork;
+      } else {
+        erroredWork = workInProgress;
+      }
+      continue;
+    }
+    // Return to the normal work loop.
+    return;
+  } while (true);
+}
 
 // 1578
 // read: 这里是一些 hooks。不同的触发时机，hook 还不一样
@@ -1240,7 +1260,7 @@ function renderRootSync(root: FiberRoot, lanes: Lanes) {
       break;
     } catch (thrownValue) {
       console.error('thrownValue in renderRootSync,handleError函数需要实现', thrownValue);
-      // handleError(root, thrownValue);
+      handleError(root, thrownValue);
     }
   } while (true);
   resetContextDependencies();
@@ -1304,7 +1324,7 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
       break;
     } catch (thrownValue) {
       console.error('thrownValue in renderRootConcurrent,handleError函数需要实现', thrownValue);
-      // handleError(root, thrownValue);
+      handleError(root, thrownValue);
     }
   } while (true);
   resetContextDependencies();
@@ -1347,6 +1367,103 @@ function workLoopConcurrent() {
 // 1831
 function performUnitOfWork(unitOfWork: Fiber): void {
   console.error(' performUnitOfWork，需要实现');
+}
+// 1859
+function completeUnitOfWork(unitOfWork: Fiber): void {
+  // Attempt to complete the current unit of work, then move to the next
+  // sibling. If there are no more siblings, return to the parent fiber.
+  let completedWork: Fiber | null = unitOfWork;
+  do {
+    // The current, flushed, state of this fiber is the alternate. Ideally
+    // nothing should rely on this, but relying on it here means that we don't
+    // need an additional field on the work in progress.
+    const current = completedWork.alternate;
+    const returnFiber: Fiber | null = completedWork.return;
+
+    // Check if the work completed or if something threw.
+    if ((completedWork.flags & Flags.Incomplete) === Flags.NoFlags) {
+      let next;
+      if (
+        !enableProfilerTimer ||
+        (completedWork.mode & TypeOfMode.ProfileMode) === TypeOfMode.NoMode
+      ) {
+        next = completeWork(current, completedWork, subtreeRenderLanes);
+      } else {
+        startProfilerTimer(completedWork);
+        next = completeWork(current, completedWork, subtreeRenderLanes);
+        // Update render duration assuming we didn't error.
+        stopProfilerTimerIfRunningAndRecordDelta(completedWork, false);
+      }
+
+      if (next !== null) {
+        // Completing this fiber spawned new work. Work on that next.
+        workInProgress = next;
+        return;
+      }
+    } else {
+      // This fiber did not complete because something threw. Pop values off
+      // the stack without entering the complete phase. If this is a boundary,
+      // capture values if possible.
+      const next = unwindWork(current, completedWork, subtreeRenderLanes);
+
+      // Because this fiber did not complete, don't reset its lanes.
+
+      if (next !== null) {
+        // If completing this work spawned new work, do that next. We'll come
+        // back here again.
+        // Since we're restarting, remove anything that is not a host effect
+        // from the effect tag.
+        next.flags &= Flags.HostEffectMask;
+        workInProgress = next;
+        return;
+      }
+
+      if (
+        enableProfilerTimer &&
+        (completedWork.mode & TypeOfMode.ProfileMode) !== TypeOfMode.NoMode
+      ) {
+        // Record the render duration for the fiber that errored.
+        stopProfilerTimerIfRunningAndRecordDelta(completedWork, false);
+
+        // Include the time spent working on failed children before continuing.
+        let actualDuration = completedWork.actualDuration || 0;
+        let child = completedWork.child;
+        while (child !== null) {
+          actualDuration += child.actualDuration || 0;
+          child = child.sibling;
+        }
+        completedWork.actualDuration = actualDuration;
+      }
+
+      if (returnFiber !== null) {
+        // Mark the parent fiber as incomplete and clear its subtree flags.
+        returnFiber.flags |= Flags.Incomplete;
+        returnFiber.subtreeFlags = Flags.NoFlags;
+        returnFiber.deletions = null;
+      } else {
+        // We've unwound all the way to the root.
+        workInProgressRootExitStatus = RootExitStatus.RootDidNotComplete;
+        workInProgress = null;
+        return;
+      }
+    }
+
+    const siblingFiber = completedWork.sibling;
+    if (siblingFiber !== null) {
+      // If there is more work to do in this returnFiber, do that next.
+      workInProgress = siblingFiber;
+      return;
+    }
+    // Otherwise, return to the parent
+    completedWork = returnFiber;
+    // Update the next thing we're working on in case something throws.
+    workInProgress = completedWork;
+  } while (completedWork !== null);
+
+  // We've reached the root.
+  if (workInProgressRootExitStatus === RootExitStatus.RootInProgress) {
+    workInProgressRootExitStatus = RootExitStatus.RootCompleted;
+  }
 }
 
 // 1958

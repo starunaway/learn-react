@@ -3,6 +3,9 @@ import {
   enableProfilerNestedUpdatePhase,
   enableProfilerTimer,
 } from '../shared/ReactFeatureFlags';
+import { Fiber } from './ReactInternalTypes';
+import { WorkTag } from './ReactWorkTags';
+import { now } from './Scheduler';
 
 /**
  * Tracks whether the current update was a nested/cascading update (scheduled from a layout effect).
@@ -23,6 +26,11 @@ import {
 let currentUpdateIsNested: boolean = false;
 let nestedUpdateScheduled: boolean = false;
 
+let commitTime: number = 0;
+let layoutEffectStartTime: number = -1;
+let profilerStartTime: number = -1;
+let passiveEffectStartTime: number = -1;
+
 function resetNestedUpdateFlag(): void {
   if (enableProfilerNestedUpdatePhase) {
     currentUpdateIsNested = false;
@@ -37,6 +45,73 @@ function syncNestedUpdateFlag(): void {
   }
 }
 
+function recordPassiveEffectDuration(fiber: Fiber): void {
+  if (!enableProfilerTimer || !enableProfilerCommitHooks) {
+    return;
+  }
+
+  if (passiveEffectStartTime >= 0) {
+    const elapsedTime = now() - passiveEffectStartTime;
+
+    passiveEffectStartTime = -1;
+
+    // Store duration on the next nearest Profiler ancestor
+    // Or the root (for the DevTools Profiler to read)
+    let parentFiber = fiber.return;
+    while (parentFiber !== null) {
+      switch (parentFiber.tag) {
+        case WorkTag.HostRoot:
+          const root = parentFiber.stateNode;
+          if (root !== null) {
+            root.passiveEffectDuration += elapsedTime;
+          }
+          return;
+        case WorkTag.Profiler:
+          const parentStateNode = parentFiber.stateNode;
+          if (parentStateNode !== null) {
+            // Detached fibers have their state node cleared out.
+            // In this case, the return pointer is also cleared out,
+            // so we won't be able to report the time spent in this Profiler's subtree.
+            parentStateNode.passiveEffectDuration += elapsedTime;
+          }
+          return;
+      }
+      parentFiber = parentFiber.return;
+    }
+  }
+}
+
+function startProfilerTimer(fiber: Fiber): void {
+  if (!enableProfilerTimer) {
+    return;
+  }
+
+  profilerStartTime = now();
+
+  if ((fiber.actualStartTime || 0) < 0) {
+    fiber.actualStartTime = now();
+  }
+}
+
+function stopProfilerTimerIfRunningAndRecordDelta(fiber: Fiber, overrideBaseTime: boolean): void {
+  if (!enableProfilerTimer) {
+    return;
+  }
+
+  if (profilerStartTime >= 0) {
+    const elapsedTime = now() - profilerStartTime;
+    console.log(
+      'stopProfilerTimerIfRunningAndRecordDelta 这里fiber.actualDuration已经被更新过了,不应该是 NaN 或 undefined',
+      fiber.actualDuration
+    );
+    fiber.actualDuration = (fiber.actualDuration || 0) + elapsedTime;
+    if (overrideBaseTime) {
+      fiber.selfBaseDuration = elapsedTime;
+    }
+    profilerStartTime = -1;
+  }
+}
+
 function startPassiveEffectTimer(): void {
   if (!enableProfilerTimer || !enableProfilerCommitHooks) {
     return;
@@ -45,4 +120,11 @@ function startPassiveEffectTimer(): void {
   //   passiveEffectStartTime = now();
 }
 
-export { resetNestedUpdateFlag, syncNestedUpdateFlag, startPassiveEffectTimer };
+export {
+  resetNestedUpdateFlag,
+  startProfilerTimer,
+  syncNestedUpdateFlag,
+  startPassiveEffectTimer,
+  recordPassiveEffectDuration,
+  stopProfilerTimerIfRunningAndRecordDelta,
+};

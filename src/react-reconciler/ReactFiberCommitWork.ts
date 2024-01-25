@@ -3,6 +3,7 @@ import {
   enableCache,
   enableProfilerCommitHooks,
   enableProfilerTimer,
+  enableSchedulingProfiler,
   enableTransitionTracing,
 } from '../shared/ReactFeatureFlags';
 import { releaseCache, retainCache } from './ReactFiberCacheComponent';
@@ -15,7 +16,9 @@ import { WorkTag } from './ReactWorkTags';
 import type { Cache } from './ReactFiberCacheComponent';
 import { captureCommitPhaseError } from './ReactFiberWorkLoop';
 import { HookFlags } from './ReactHookEffectTags';
-import { startPassiveEffectTimer } from './ReactProfilerTimer';
+import { recordPassiveEffectDuration, startPassiveEffectTimer } from './ReactProfilerTimer';
+import { FunctionComponentUpdateQueue } from './ReactFiberHooks';
+import { Instance, detachDeletedInstance } from '../react-dom/ReactFiberHostConfig';
 
 let didWarnAboutUndefinedSnapshotBeforeUpdate: Set<any> | null = null;
 
@@ -32,6 +35,100 @@ let nextEffect: Fiber | null = null;
 // Used for Profiling builds to track updaters.
 let inProgressLanes: Lanes | null = null;
 let inProgressRoot: FiberRoot | null = null;
+
+function safelyCallDestroy(
+  current: Fiber,
+  nearestMountedAncestor: Fiber | null,
+  destroy: () => void
+) {
+  try {
+    destroy();
+  } catch (error) {
+    captureCommitPhaseError(current, nearestMountedAncestor, error as any);
+  }
+}
+
+let focusedInstanceHandle: null | Fiber = null;
+let shouldFireAfterActiveInstanceBlur: boolean = false;
+
+// 512
+function commitHookEffectListUnmount(
+  flags: HookFlags,
+  finishedWork: Fiber,
+  nearestMountedAncestor: Fiber | null
+) {
+  const updateQueue: FunctionComponentUpdateQueue | null = finishedWork.updateQueue as any;
+  const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
+  if (lastEffect !== null) {
+    const firstEffect = lastEffect.next;
+    let effect = firstEffect;
+    do {
+      if ((effect.tag & flags) === flags) {
+        // Unmount
+        const destroy = effect.destroy;
+        effect.destroy = undefined;
+        if (destroy !== undefined) {
+          // read: 这里是给 devtool 用的
+          //   if (enableSchedulingProfiler) {
+          //     if ((flags & HookFlags.Passive) !== HookFlags.NoFlags) {
+          //       markComponentPassiveEffectUnmountStarted(finishedWork);
+          //     } else if ((flags & HookFlags.Layout) !== HookFlags.NoFlags) {
+          //       markComponentLayoutEffectUnmountStarted(finishedWork);
+          //     }
+          //   }
+
+          safelyCallDestroy(finishedWork, nearestMountedAncestor, destroy);
+          // read: 这里是给 devtool 用的
+          //   if (enableSchedulingProfiler) {
+          //     if ((flags & HookFlags.Passive) !== HookFlags.NoFlags) {
+          //       markComponentPassiveEffectUnmountStopped();
+          //     } else if ((flags & HookFlags.Layout) !== HookFlags.NoFlags) {
+          //       markComponentLayoutEffectUnmountStopped();
+          //     }
+          //   }
+        }
+      }
+      effect = effect.next;
+    } while (effect !== firstEffect);
+  }
+}
+
+function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {
+  const updateQueue: FunctionComponentUpdateQueue | null = finishedWork.updateQueue as any;
+  const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
+  if (lastEffect !== null) {
+    const firstEffect = lastEffect.next;
+    let effect = firstEffect;
+    do {
+      if ((effect.tag & flags) === flags) {
+        // read : 这里是给 devtool 用的
+        // if (enableSchedulingProfiler) {
+        //   if ((flags & HookPassive) !== NoHookEffect) {
+        //     markComponentPassiveEffectMountStarted(finishedWork);
+        //   } else if ((flags & HookLayout) !== NoHookEffect) {
+        //     markComponentLayoutEffectMountStarted(finishedWork);
+        //   }
+        // }
+
+        // Mount
+        const create = effect.create;
+
+        effect.destroy = create();
+
+        // read : 这里是给 devtool 用的
+        // if (enableSchedulingProfiler) {
+        //   if ((flags & HookPassive) !== NoHookEffect) {
+        //     markComponentPassiveEffectMountStopped();
+        //   } else if ((flags & HookLayout) !== NoHookEffect) {
+        //     markComponentLayoutEffectMountStopped();
+        //   }
+        // }
+      }
+      effect = effect.next;
+    } while (effect !== firstEffect);
+  }
+}
+
 // 650
 export function commitPassiveEffectDurations(finishedRoot: FiberRoot, finishedWork: Fiber): void {
   if (enableProfilerTimer && enableProfilerCommitHooks) {
@@ -79,6 +176,76 @@ export function commitPassiveEffectDurations(finishedRoot: FiberRoot, finishedWo
         default:
           break;
       }
+    }
+  }
+}
+
+// 1337
+function detachFiberAfterEffects(fiber: Fiber) {
+  const alternate = fiber.alternate;
+  if (alternate !== null) {
+    fiber.alternate = null;
+    detachFiberAfterEffects(alternate);
+  }
+
+  // Note: Defensively using negation instead of < in case
+  // `deletedTreeCleanUpLevel` is undefined.
+  if (!(deletedTreeCleanUpLevel >= 2)) {
+    // This is the default branch (level 0).
+    fiber.child = null;
+    fiber.deletions = null;
+    fiber.dependencies = null;
+    fiber.memoizedProps = null;
+    fiber.memoizedState = null;
+    fiber.pendingProps = null;
+    fiber.sibling = null;
+    fiber.stateNode = null;
+    fiber.updateQueue = null;
+  } else {
+    // Clear cyclical Fiber fields. This level alone is designed to roughly
+    // approximate the planned Fiber refactor. In that world, `setState` will be
+    // bound to a special "instance" object instead of a Fiber. The Instance
+    // object will not have any of these fields. It will only be connected to
+    // the fiber tree via a single link at the root. So if this level alone is
+    // sufficient to fix memory issues, that bodes well for our plans.
+    fiber.child = null;
+    fiber.deletions = null;
+    fiber.sibling = null;
+
+    // The `stateNode` is cyclical because on host nodes it points to the host
+    // tree, which has its own pointers to children, parents, and siblings.
+    // The other host nodes also point back to fibers, so we should detach that
+    // one, too.
+    if (fiber.tag === WorkTag.HostComponent) {
+      const hostInstance: Instance = fiber.stateNode;
+      if (hostInstance !== null) {
+        detachDeletedInstance(hostInstance);
+      }
+    }
+    fiber.stateNode = null;
+
+    // I'm intentionally not clearing the `return` field in this level. We
+    // already disconnect the `return` pointer at the root of the deleted
+    // subtree (in `detachFiberMutation`). Besides, `return` by itself is not
+    // cyclical — it's only cyclical when combined with `child`, `sibling`, and
+    // `alternate`. But we'll clear it in the next level anyway, just in case.
+
+    if (deletedTreeCleanUpLevel >= 3) {
+      // Theoretically, nothing in here should be necessary, because we already
+      // disconnected the fiber from the tree. So even if something leaks this
+      // particular fiber, it won't leak anything else
+      //
+      // The purpose of this branch is to be super aggressive so we can measure
+      // if there's any difference in memory impact. If there is, that could
+      // indicate a React leak we don't know about.
+      fiber.return = null;
+      fiber.dependencies = null;
+      fiber.memoizedProps = null;
+      fiber.memoizedState = null;
+      fiber.pendingProps = null;
+      fiber.stateNode = null;
+      // TODO: Move to `commitPassiveUnmountInsideDeletedTreeOnFiber` instead.
+      fiber.updateQueue = null;
     }
   }
 }
@@ -347,6 +514,175 @@ function commitPassiveUnmountEffects_begin() {
       nextEffect = child;
     } else {
       commitPassiveUnmountEffects_complete();
+    }
+  }
+}
+
+// 3053
+function commitPassiveUnmountEffects_complete() {
+  while (nextEffect !== null) {
+    const fiber = nextEffect;
+    if ((fiber.flags & Flags.Passive) !== Flags.NoFlags) {
+      commitPassiveUnmountOnFiber(fiber);
+    }
+
+    const sibling = fiber.sibling;
+    if (sibling !== null) {
+      sibling.return = fiber.return;
+      nextEffect = sibling;
+      return;
+    }
+
+    nextEffect = fiber.return;
+  }
+}
+
+// 3073
+function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
+  switch (finishedWork.tag) {
+    case WorkTag.FunctionComponent:
+    case WorkTag.ForwardRef:
+    case WorkTag.SimpleMemoComponent: {
+      if (
+        enableProfilerTimer &&
+        enableProfilerCommitHooks &&
+        finishedWork.mode & TypeOfMode.ProfileMode
+      ) {
+        startPassiveEffectTimer();
+        commitHookEffectListUnmount(
+          HookFlags.Passive | HookFlags.HasEffect,
+          finishedWork,
+          finishedWork.return
+        );
+        recordPassiveEffectDuration(finishedWork);
+      } else {
+        commitHookEffectListUnmount(
+          HookFlags.Passive | HookFlags.HasEffect,
+          finishedWork,
+          finishedWork.return
+        );
+      }
+      break;
+    }
+  }
+}
+
+// 3102
+function commitPassiveUnmountEffectsInsideOfDeletedTree_begin(
+  deletedSubtreeRoot: Fiber,
+  nearestMountedAncestor: Fiber | null
+) {
+  while (nextEffect !== null) {
+    const fiber = nextEffect;
+
+    // Deletion effects fire in parent -> child order
+    // TODO: Check if fiber has a PassiveStatic flag
+    // setCurrentDebugFiberInDEV(fiber);
+    commitPassiveUnmountInsideDeletedTreeOnFiber(fiber, nearestMountedAncestor);
+    // resetCurrentDebugFiberInDEV();
+
+    const child = fiber.child;
+    // TODO: Only traverse subtree if it has a PassiveStatic flag. (But, if we
+    // do this, still need to handle `deletedTreeCleanUpLevel` correctly.)
+    if (child !== null) {
+      child.return = fiber;
+      nextEffect = child;
+    } else {
+      commitPassiveUnmountEffectsInsideOfDeletedTree_complete(deletedSubtreeRoot);
+    }
+  }
+}
+// 3129
+function commitPassiveUnmountEffectsInsideOfDeletedTree_complete(deletedSubtreeRoot: Fiber) {
+  while (nextEffect !== null) {
+    const fiber = nextEffect;
+    const sibling = fiber.sibling;
+    const returnFiber = fiber.return;
+
+    if (deletedTreeCleanUpLevel >= 2) {
+      // Recursively traverse the entire deleted tree and clean up fiber fields.
+      // This is more aggressive than ideal, and the long term goal is to only
+      // have to detach the deleted tree at the root.
+      detachFiberAfterEffects(fiber);
+      if (fiber === deletedSubtreeRoot) {
+        nextEffect = null;
+        return;
+      }
+    } else {
+      // This is the default branch (level 0). We do not recursively clear all
+      // the fiber fields. Only the root of the deleted subtree.
+      if (fiber === deletedSubtreeRoot) {
+        detachFiberAfterEffects(fiber);
+        nextEffect = null;
+        return;
+      }
+    }
+
+    if (sibling !== null) {
+      sibling.return = returnFiber;
+      nextEffect = sibling;
+      return;
+    }
+
+    nextEffect = returnFiber;
+  }
+}
+
+// 3166
+function commitPassiveUnmountInsideDeletedTreeOnFiber(
+  current: Fiber,
+  nearestMountedAncestor: Fiber | null
+): void {
+  switch (current.tag) {
+    case WorkTag.FunctionComponent:
+    case WorkTag.ForwardRef:
+    case WorkTag.SimpleMemoComponent: {
+      if (
+        enableProfilerTimer &&
+        enableProfilerCommitHooks &&
+        current.mode & TypeOfMode.ProfileMode
+      ) {
+        startPassiveEffectTimer();
+        commitHookEffectListUnmount(HookFlags.Passive, current, nearestMountedAncestor);
+        recordPassiveEffectDuration(current);
+      } else {
+        commitHookEffectListUnmount(HookFlags.Passive, current, nearestMountedAncestor);
+      }
+      break;
+    }
+    // TODO: run passive unmount effects when unmounting a root.
+    // Because passive unmount effects are not currently run,
+    // the cache instance owned by the root will never be freed.
+    // When effects are run, the cache should be freed here:
+    // case HostRoot: {
+    //   if (enableCache) {
+    //     const cache = current.memoizedState.cache;
+    //     releaseCache(cache);
+    //   }
+    //   break;
+    // }
+    case WorkTag.LegacyHiddenComponent:
+    case WorkTag.OffscreenComponent: {
+      if (enableCache) {
+        if (current.memoizedState !== null && current.memoizedState.cachePool !== null) {
+          const cache: Cache = current.memoizedState.cachePool.pool;
+          // Retain/release the cache used for pending (suspended) nodes.
+          // Note that this is only reached in the non-suspended/visible case:
+          // when the content is suspended/hidden, the retain/release occurs
+          // via the parent Suspense component (see case above).
+          if (cache != null) {
+            retainCache(cache);
+          }
+        }
+      }
+      break;
+    }
+    case WorkTag.CacheComponent: {
+      if (enableCache) {
+        const cache = current.memoizedState.cache;
+        releaseCache(cache);
+      }
+      break;
     }
   }
 }

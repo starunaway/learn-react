@@ -10,11 +10,17 @@ let isInsideEventHandler = false;
 
 // read: 在 web 上应该有真正的实现函数
 // Defaults
-let batchedUpdatesImpl = function (fn: Function, ...bookkeeping: any[]) {
-  return fn(bookkeeping);
+let batchedUpdatesImpl = function <A, R>(fn: (a: A, b?: any) => R, a: A, b?: any): R {
+  return fn(a, b);
 };
 
-let discreteUpdatesImpl = function (fn: Function, a: any, b: any, c: any, d: any) {
+let discreteUpdatesImpl = function <A, B, C, D, R>(
+  fn: (a: A, b: B, c: C, d: D) => R,
+  a: A,
+  b: B,
+  c: C,
+  d: D
+) {
   return fn(a, b, c, d);
 };
 
@@ -37,7 +43,7 @@ function finishEventHandler() {
   }
 }
 
-export function batchedUpdates(fn: Function, a?: any, b?: any) {
+export function batchedUpdates<A, R>(fn: (a?: A, b?: any) => R, a?: A, b?: any) {
   console.log('batchedUpdates here');
   if (isInsideEventHandler) {
     // If we are currently inside another batch, we need to wait until it

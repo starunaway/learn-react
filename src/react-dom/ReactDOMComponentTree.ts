@@ -161,3 +161,13 @@ export function getEventHandlerListeners(
 ): null | Set<ReactDOMEventHandleListener> {
   return (scope as any)[internalEventHandlerListenersKey] || null;
 }
+
+export function detachDeletedInstance(node: Instance): void {
+  // TODO: This function is only called on host components. I don't think all of
+  // these fields are relevant.
+  delete (node as any)[internalInstanceKey];
+  delete (node as any)[internalPropsKey];
+  delete (node as any)[internalEventHandlersKey];
+  delete (node as any)[internalEventHandlerListenersKey];
+  delete (node as any)[internalEventHandlesSetKey];
+}

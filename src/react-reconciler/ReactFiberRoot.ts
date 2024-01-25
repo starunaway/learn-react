@@ -155,6 +155,7 @@ export function createFiberRoot(
   onRecoverableError: null | ((error: mixed) => void)
   // transitionCallbacks: null | TransitionTracingCallbacks
 ): FiberRoot {
+  console.log('root fiber 的 lane 决定了使用哪种更新方式');
   const root: FiberRoot = new FiberRootNode(
     containerInfo,
     tag,
@@ -163,6 +164,7 @@ export function createFiberRoot(
     onRecoverableError
     // read: 源码里做了这种类型转换，😄
   ) as unknown as FiberRoot;
+  console.log('root fiber的 lane 决定了使用哪种更新方式,在getNextLanes 中有用到', root);
 
   // Cyclic construction. This cheats the type system right now because
   // stateNode is any.
