@@ -70,10 +70,81 @@ function pushContextProvider(workInProgress: Fiber): boolean {
   }
 }
 
+function getUnmaskedContext(
+  workInProgress: Fiber,
+  Component: Function,
+  didPushOwnContextIfProvider: boolean
+): Record<string | number | symbol, any> {
+  if (disableLegacyContext) {
+    return emptyContextObject;
+  } else {
+    if (didPushOwnContextIfProvider && isContextProvider(Component)) {
+      // If the fiber is a context provider itself, when we read its context
+      // we may have already pushed its own child context on the stack. A context
+      // provider should not "see" its own child context. Therefore we read the
+      // previous (parent) context instead for a context provider.
+      return previousContext!;
+    }
+    return contextStackCursor.current!;
+  }
+}
+
+function cacheContext(
+  workInProgress: Fiber,
+  unmaskedContext: Record<string | number | symbol, any>,
+  maskedContext: Record<string | number | symbol, any>
+): void {
+  if (disableLegacyContext) {
+    return;
+  } else {
+    const instance = workInProgress.stateNode;
+    instance.__reactInternalMemoizedUnmaskedChildContext = unmaskedContext;
+    instance.__reactInternalMemoizedMaskedChildContext = maskedContext;
+  }
+}
+
+function getMaskedContext(
+  workInProgress: Fiber,
+  unmaskedContext: Record<string | number | symbol, any>
+): Object {
+  if (disableLegacyContext) {
+    return emptyContextObject;
+  } else {
+    const type = workInProgress.type;
+    const contextTypes = type.contextTypes;
+    if (!contextTypes) {
+      return emptyContextObject;
+    }
+
+    // Avoid recreating masked context unless unmasked context has changed.
+    // Failing to do this will result in unnecessary calls to componentWillReceiveProps.
+    // This may trigger infinite loops if componentWillReceiveProps calls setState.
+    const instance = workInProgress.stateNode;
+    if (instance && instance.__reactInternalMemoizedUnmaskedChildContext === unmaskedContext) {
+      return instance.__reactInternalMemoizedMaskedChildContext;
+    }
+
+    const context: Record<string | number | symbol, any> = {};
+    for (const key in contextTypes) {
+      context[key] = unmaskedContext[key];
+    }
+
+    // Cache unmasked context so we can avoid recreating masked context unless necessary.
+    // Context is created before the class component is instantiated so check for instance.
+    if (instance) {
+      cacheContext(workInProgress, unmaskedContext, context);
+    }
+
+    return context;
+  }
+}
+
 export {
   popTopLevelContextObject,
   hasContextChanged,
   pushTopLevelContextObject,
   isContextProvider,
   pushContextProvider,
+  getUnmaskedContext,
+  getMaskedContext,
 };

@@ -6,9 +6,10 @@ import { createCursor, push, pop } from './ReactFiberStack';
 import { isPrimaryRenderer } from '../react-dom/ReactFiberHostConfig';
 import { enableLazyContextPropagation, enableServerContext } from '../shared/ReactFeatureFlags';
 import { mixed } from '../types';
-import { Lanes, NoLanes } from './ReactFiberLane';
+import { Lanes, NoLanes, includesSomeLane } from './ReactFiberLane';
 import { Flags } from './ReactFiberFlags';
 import { WorkTag } from './ReactWorkTags';
+import { markWorkInProgressReceivedUpdate } from './ReactFiberBeginWork';
 
 const valueCursor: StackCursor<any> = createCursor<any>(null);
 
@@ -122,6 +123,9 @@ function propagateParentContextChanges(
   if (!enableLazyContextPropagation) {
     return;
   }
+  console.error(
+    '将父级上下文的变更向下传播给它们的子级.没有开启特性，应该直接跳过去，如果走到这里，需要补齐逻辑了'
+  );
 
   /*
   // Collect all the parent providers that changed. Since this is usually small
@@ -206,4 +210,28 @@ export function lazilyPropagateParentContextChanges(
 ) {
   const forcePropagateEntireTree = false;
   propagateParentContextChanges(current, workInProgress, renderLanes, forcePropagateEntireTree);
+}
+
+export function prepareToReadContext(workInProgress: Fiber, renderLanes: Lanes): void {
+  currentlyRenderingFiber = workInProgress;
+  lastContextDependency = null;
+  lastFullyObservedContext = null;
+
+  const dependencies = workInProgress.dependencies;
+  if (dependencies !== null) {
+    if (enableLazyContextPropagation) {
+      // Reset the work-in-progress list
+      dependencies.firstContext = null;
+    } else {
+      const firstContext = dependencies.firstContext;
+      if (firstContext !== null) {
+        if (includesSomeLane(dependencies.lanes, renderLanes)) {
+          // Context list has a pending update. Mark that this fiber performed work.
+          markWorkInProgressReceivedUpdate();
+        }
+        // Reset the work-in-progress list
+        dependencies.firstContext = null;
+      }
+    }
+  }
 }

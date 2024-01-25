@@ -106,6 +106,7 @@ export type Fiber<Q extends mixed = any> = {
   updateQueue: UpdateQueue<Q> | null;
 
   // The state used to create the output
+  // read: 实际代码中这里挂载的是 hooks？
   memoizedState: any;
 
   // Dependencies (contexts, events) for this fiber, if it has any
@@ -314,7 +315,7 @@ export type Dispatcher = {
   //   init?: (initial: I) => S
   // ): [S, Dispatch<A>];
   useContext<T>(context: ReactContext<T>): T;
-  useRef<T>(initialValue: T): { current: T };
+  // useRef<T>(initialValue: T): { current: T };
   useEffect(create: () => (() => void) | void, deps: Array<mixed> | void | null): void;
   // useInsertionEffect(create: () => (() => void) | void, deps: Array<mixed> | void | null): void;
   // useLayoutEffect(create: () => (() => void) | void, deps: Array<mixed> | void | null): void;

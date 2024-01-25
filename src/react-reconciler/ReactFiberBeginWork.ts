@@ -1,9 +1,12 @@
 import {
+  disableLegacyContext,
+  disableModulePatternComponents,
   enableCache,
   enableLazyContextPropagation,
   enableLegacyHidden,
   enableProfilerCommitHooks,
   enableProfilerTimer,
+  enableSchedulingProfiler,
   enableScopeAPI,
   enableTransitionTracing,
 } from '../shared/ReactFeatureFlags';
@@ -19,11 +22,17 @@ import {
   pushTopLevelContextObject,
   pushContextProvider as pushLegacyContextProvider,
   isContextProvider as isLegacyContextProvider,
+  getUnmaskedContext,
+  getMaskedContext,
   // pushTopLevelContextObject,
   // invalidateContextProvider,
 } from './ReactFiberContext';
 import { ReactContext } from '../shared/ReactTypes';
-import { lazilyPropagateParentContextChanges, pushProvider } from './ReactFiberNewContext';
+import {
+  lazilyPropagateParentContextChanges,
+  prepareToReadContext,
+  pushProvider,
+} from './ReactFiberNewContext';
 import { pushHostContainer, pushHostContext } from './ReactFiberHostContext';
 import { pushRootTransition } from './ReactFiberTransition';
 import { pushCacheProvider } from './ReactFiberCacheComponent';
@@ -32,6 +41,9 @@ import { getIsHydrating, resetHydrationState } from './ReactFiberHydrationContex
 import { markSkippedUpdateLanes } from './ReactFiberWorkLoop';
 import { stopProfilerTimerIfRunning } from './ReactProfilerTimer';
 import { cloneChildFibers } from './ReactChildFiber';
+import { getForksAtLevel, isForkedChild, pushTreeId } from './ReactFiberTreeContext';
+import { TypeOfMode } from './ReactTypeOfMode';
+import { renderWithHooks } from './ReactFiberHooks';
 
 let didReceiveUpdate: boolean = false;
 
@@ -51,6 +63,112 @@ function pushHostRootContext(workInProgress: Fiber) {
   pushHostContainer(workInProgress, root.containerInfo);
 }
 
+// 1618
+function mountIndeterminateComponent(
+  _current: Fiber | null,
+  workInProgress: Fiber,
+  Component: any,
+  renderLanes: Lanes
+) {
+  resetSuspendedCurrentOnMountInLegacyMode(_current, workInProgress);
+
+  const props = workInProgress.pendingProps;
+  let context;
+  if (!disableLegacyContext) {
+    const unmaskedContext = getUnmaskedContext(workInProgress, Component, false);
+    context = getMaskedContext(workInProgress, unmaskedContext);
+  }
+
+  prepareToReadContext(workInProgress, renderLanes);
+  let value;
+  let hasId;
+
+  // read: devtools 才使用
+  // if (enableSchedulingProfiler) {
+  //   markComponentRenderStarted(workInProgress);
+  // }
+
+  value = renderWithHooks(null, workInProgress, Component, props, context, renderLanes);
+  hasId = checkDidRenderIdHook();
+  // read: devtools 才使用
+  // if (enableSchedulingProfiler) {
+  //   markComponentRenderStopped();
+  // }
+
+  // React DevTools reads this flag.
+  workInProgress.flags |= Flags.PerformedWork;
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof value.render === 'function' &&
+    value.$$typeof === undefined
+  ) {
+    // Proceed under the assumption that this is a class instance
+    workInProgress.tag = WorkTag.ClassComponent;
+
+    // Throw out any hooks that were used.
+    workInProgress.memoizedState = null;
+    workInProgress.updateQueue = null;
+
+    // Push context providers early to prevent context stack mismatches.
+    // During mounting we don't know the child context yet as the instance doesn't exist.
+    // We will invalidate the child context in finishClassComponent() right after rendering.
+    let hasContext = false;
+    if (isLegacyContextProvider(Component)) {
+      hasContext = true;
+      pushLegacyContextProvider(workInProgress);
+    } else {
+      hasContext = false;
+    }
+
+    workInProgress.memoizedState =
+      value.state !== null && value.state !== undefined ? value.state : null;
+
+    initializeUpdateQueue(workInProgress);
+
+    adoptClassInstance(workInProgress, value);
+    mountClassInstance(workInProgress, Component, props, renderLanes);
+    return finishClassComponent(null, workInProgress, Component, true, hasContext, renderLanes);
+  } else {
+    // Proceed under the assumption that this is a function component
+    workInProgress.tag = WorkTag.FunctionComponent;
+
+    if (getIsHydrating() && hasId) {
+      pushMaterializedTreeId(workInProgress);
+    }
+
+    reconcileChildren(null, workInProgress, value, renderLanes);
+
+    return workInProgress.child;
+  }
+}
+
+export function markWorkInProgressReceivedUpdate() {
+  didReceiveUpdate = true;
+}
+
+export function checkIfWorkInProgressReceivedUpdate() {
+  return didReceiveUpdate;
+}
+
+// 3336
+// read:如果工作进展的模式与并发模式无关，则会执行某些操作。
+// 如果当前组件不为空，则会断开当前组件和工作进展的交替指针，并将工作进展的标志设置为Placement
+function resetSuspendedCurrentOnMountInLegacyMode(current: Fiber | null, workInProgress: Fiber) {
+  if ((workInProgress.mode & TypeOfMode.ConcurrentMode) === TypeOfMode.NoMode) {
+    if (current !== null) {
+      // A lazy component only mounts if it suspended inside a non-
+      // concurrent tree, in an inconsistent state. We want to treat it like
+      // a new mount, even though an empty version of it already committed.
+      // Disconnect the alternate pointers.
+      current.alternate = null;
+      workInProgress.alternate = null;
+      // Since this is conceptually a new fiber, schedule a Placement effect
+      workInProgress.flags |= Flags.Placement;
+    }
+  }
+}
 // 3351
 function bailoutOnAlreadyFinishedWork(
   current: Fiber | null,
@@ -407,6 +525,7 @@ function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: La
   //read: 有部分类型，先不看，后面再补逻辑
   switch (workInProgress.tag) {
     case WorkTag.IndeterminateComponent: {
+      console.log('begin 当前 Fiber 是 IndeterminateComponent');
       return mountIndeterminateComponent(current, workInProgress, workInProgress.type, renderLanes);
     }
     // case WorkTag.LazyComponent: {
