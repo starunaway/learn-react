@@ -6,10 +6,19 @@ import { createCursor, push, pop } from './ReactFiberStack';
 import { isPrimaryRenderer } from '../react-dom/ReactFiberHostConfig';
 import { enableLazyContextPropagation, enableServerContext } from '../shared/ReactFeatureFlags';
 import { mixed } from '../types';
-import { Lanes, NoLanes, includesSomeLane } from './ReactFiberLane';
+import {
+  Lanes,
+  NoLanes,
+  NoTimestamp,
+  includesSomeLane,
+  isSubsetOfLanes,
+  mergeLanes,
+  pickArbitraryLane,
+} from './ReactFiberLane';
 import { Flags } from './ReactFiberFlags';
 import { WorkTag } from './ReactWorkTags';
 import { markWorkInProgressReceivedUpdate } from './ReactFiberBeginWork';
+import { QueueUpdateState, SharedQueue, createUpdate } from './ReactFiberClassUpdateQueue';
 
 const valueCursor: StackCursor<any> = createCursor<any>(null);
 
@@ -60,6 +69,174 @@ export function popProvider(context: ReactContext<any>, providerFiber: Fiber): v
     } else {
       context._currentValue2 = currentValue;
     }
+  }
+}
+
+export function scheduleContextWorkOnParentPath(
+  parent: Fiber | null,
+  renderLanes: Lanes,
+  propagationRoot: Fiber
+) {
+  // Update the child lanes of all the ancestors, including the alternates.
+  let node = parent;
+  while (node !== null) {
+    const alternate = node.alternate;
+    if (!isSubsetOfLanes(node.childLanes, renderLanes)) {
+      node.childLanes = mergeLanes(node.childLanes, renderLanes);
+      if (alternate !== null) {
+        alternate.childLanes = mergeLanes(alternate.childLanes, renderLanes);
+      }
+    } else if (alternate !== null && !isSubsetOfLanes(alternate.childLanes, renderLanes)) {
+      alternate.childLanes = mergeLanes(alternate.childLanes, renderLanes);
+    } else {
+      // Neither alternate was updated.
+      // Normally, this would mean that the rest of the
+      // ancestor path already has sufficient priority.
+      // However, this is not necessarily true inside offscreen
+      // or fallback trees because childLanes may be inconsistent
+      // with the surroundings. This is why we continue the loop.
+    }
+    if (node === propagationRoot) {
+      break;
+    }
+    node = node.return;
+  }
+}
+
+export function propagateContextChange<T>(
+  workInProgress: Fiber,
+  context: ReactContext<T>,
+  renderLanes: Lanes
+): void {
+  propagateContextChange_eager(workInProgress, context, renderLanes);
+}
+
+function propagateContextChange_eager<T>(
+  workInProgress: Fiber,
+  context: ReactContext<T>,
+  renderLanes: Lanes
+): void {
+  // Only used by eager implementation
+  if (enableLazyContextPropagation) {
+    return;
+  }
+  let fiber = workInProgress.child;
+  if (fiber !== null) {
+    // Set the return pointer of the child to the work-in-progress fiber.
+    fiber.return = workInProgress;
+  }
+  while (fiber !== null) {
+    let nextFiber;
+
+    // Visit this fiber.
+    const list = fiber.dependencies;
+    if (list !== null) {
+      nextFiber = fiber.child;
+
+      let dependency = list.firstContext;
+      while (dependency !== null) {
+        // Check if the context matches.
+        if (dependency.context === context) {
+          // Match! Schedule an update on this fiber.
+          if (fiber.tag === WorkTag.ClassComponent) {
+            // Schedule a force update on the work-in-progress.
+            const lane = pickArbitraryLane(renderLanes);
+            const update = createUpdate(NoTimestamp, lane);
+            update.tag = QueueUpdateState.ForceUpdate;
+            // TODO: Because we don't have a work-in-progress, this will add the
+            // update to the current fiber, too, which means it will persist even if
+            // this render is thrown away. Since it's a race condition, not sure it's
+            // worth fixing.
+
+            // Inlined `enqueueUpdate` to remove interleaved update check
+            const updateQueue = fiber.updateQueue;
+            if (updateQueue === null) {
+              // Only occurs if the fiber has been unmounted.
+            } else {
+              const sharedQueue: SharedQueue<any> = updateQueue.shared;
+              const pending = sharedQueue.pending;
+              if (pending === null) {
+                // This is the first update. Create a circular list.
+                update.next = update;
+              } else {
+                update.next = pending.next;
+                pending.next = update;
+              }
+              sharedQueue.pending = update;
+            }
+          }
+
+          fiber.lanes = mergeLanes(fiber.lanes, renderLanes);
+          const alternate = fiber.alternate;
+          if (alternate !== null) {
+            alternate.lanes = mergeLanes(alternate.lanes, renderLanes);
+          }
+          scheduleContextWorkOnParentPath(fiber.return, renderLanes, workInProgress);
+
+          // Mark the updated lanes on the list, too.
+          list.lanes = mergeLanes(list.lanes, renderLanes);
+
+          // Since we already found a match, we can stop traversing the
+          // dependency list.
+          break;
+        }
+        dependency = dependency.next;
+      }
+    } else if (fiber.tag === WorkTag.ContextProvider) {
+      // Don't scan deeper if this is a matching provider
+      nextFiber = fiber.type === workInProgress.type ? null : fiber.child;
+    } else if (fiber.tag === WorkTag.DehydratedFragment) {
+      // If a dehydrated suspense boundary is in this subtree, we don't know
+      // if it will have any context consumers in it. The best we can do is
+      // mark it as having updates.
+      const parentSuspense = fiber.return;
+
+      if (parentSuspense === null) {
+        throw new Error(
+          'We just came from a parent so we must have had a parent. This is a bug in React.'
+        );
+      }
+
+      parentSuspense.lanes = mergeLanes(parentSuspense.lanes, renderLanes);
+      const alternate = parentSuspense.alternate;
+      if (alternate !== null) {
+        alternate.lanes = mergeLanes(alternate.lanes, renderLanes);
+      }
+      // This is intentionally passing this fiber as the parent
+      // because we want to schedule this fiber as having work
+      // on its children. We'll use the childLanes on
+      // this fiber to indicate that a context has changed.
+      scheduleContextWorkOnParentPath(parentSuspense, renderLanes, workInProgress);
+      nextFiber = fiber.sibling;
+    } else {
+      // Traverse down.
+      nextFiber = fiber.child;
+    }
+
+    if (nextFiber !== null) {
+      // Set the return pointer of the child to the work-in-progress fiber.
+      nextFiber.return = fiber;
+    } else {
+      // No child. Traverse to next sibling.
+      nextFiber = fiber;
+      while (nextFiber !== null) {
+        if (nextFiber === workInProgress) {
+          // We're back to the root of this subtree. Exit.
+          nextFiber = null;
+          break;
+        }
+        const sibling = nextFiber.sibling;
+        if (sibling !== null) {
+          // Set the return pointer of the sibling to the work-in-progress fiber.
+          sibling.return = nextFiber.return;
+          nextFiber = sibling;
+          break;
+        }
+        // No more siblings. Traverse up.
+        nextFiber = nextFiber.return;
+      }
+    }
+    fiber = nextFiber;
   }
 }
 

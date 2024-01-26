@@ -4,23 +4,30 @@ import {
   Lanes,
   NoLanes,
   intersectLanes,
+  isSubsetOfLanes,
   isTransitionLane,
   markRootEntangled,
   mergeLanes,
 } from './ReactFiberLane';
 import { Fiber, FiberRoot } from './ReactInternalTypes';
-import { isUnsafeClassRenderPhaseUpdate } from './ReactFiberWorkLoop';
+import { isUnsafeClassRenderPhaseUpdate, markSkippedUpdateLanes } from './ReactFiberWorkLoop';
 
 import {
   enqueueConcurrentClassUpdate,
   unsafe_markUpdateLaneFromFiberToRoot,
 } from './ReactFiberConcurrentUpdates';
+import { Flags } from './ReactFiberFlags';
 export enum QueueUpdateState {
   UpdateState = 0,
   ReplaceState = 1,
   ForceUpdate = 2,
   CaptureUpdate = 3,
 }
+
+// Global state that is reset at the beginning of calling `processUpdateQueue`.
+// It should only be read right after calling `processUpdateQueue`, via
+// `checkHasForceUpdateAfterProcessing`.
+let hasForceUpdate = false;
 
 export type Update<State> = {
   // TODO: Temporary field. Will remove this by storing a map of
@@ -66,6 +73,263 @@ export function initializeUpdateQueue<State>(fiber: Fiber): void {
     effects: null,
   };
   fiber.updateQueue = queue;
+}
+
+// 将 current 的 queue 复制到 workInProgress上
+export function cloneUpdateQueue<State>(current: Fiber, workInProgress: Fiber): void {
+  // Clone the update queue from current. Unless it's already a clone.
+  const queue: UpdateQueue<State> = workInProgress.updateQueue!;
+  const currentQueue: UpdateQueue<State> = current.updateQueue!;
+  // read: 如果已经 clone 过，这里的浅比较是进不来的
+  // read: 直接使用 解构 ？
+  if (queue === currentQueue) {
+    const clone: UpdateQueue<State> = {
+      baseState: currentQueue.baseState,
+      firstBaseUpdate: currentQueue.firstBaseUpdate,
+      lastBaseUpdate: currentQueue.lastBaseUpdate,
+      shared: currentQueue.shared,
+      effects: currentQueue.effects,
+    };
+    workInProgress.updateQueue = clone;
+  }
+}
+
+function getStateFromUpdate<State>(
+  workInProgress: Fiber,
+  queue: UpdateQueue<State>,
+  update: Update<State>,
+  prevState: State,
+  nextProps: any,
+  instance: any
+): any {
+  switch (update.tag) {
+    case QueueUpdateState.ReplaceState: {
+      const payload = update.payload;
+      if (typeof payload === 'function') {
+        // Updater function
+
+        const nextState = payload.call(instance, prevState, nextProps);
+
+        return nextState;
+      }
+      // State object
+      return payload;
+    }
+    case QueueUpdateState.CaptureUpdate: {
+      workInProgress.flags = (workInProgress.flags & ~Flags.ShouldCapture) | Flags.DidCapture;
+    }
+    // Intentional fallthrough
+    case QueueUpdateState.UpdateState: {
+      const payload = update.payload;
+      let partialState;
+      if (typeof payload === 'function') {
+        // Updater function
+
+        partialState = payload.call(instance, prevState, nextProps);
+      } else {
+        // Partial state object
+        partialState = payload;
+      }
+      if (partialState === null || partialState === undefined) {
+        // Null and undefined are treated as no-ops.
+        return prevState;
+      }
+      // Merge the partial state and the previous state.
+      return Object.assign({}, prevState, partialState);
+    }
+    case QueueUpdateState.ForceUpdate: {
+      hasForceUpdate = true;
+      return prevState;
+    }
+  }
+  return prevState;
+}
+
+export function processUpdateQueue<State>(
+  workInProgress: Fiber,
+  props: any,
+  instance: any,
+  renderLanes: Lanes
+): void {
+  console.log('开始进行processUpdateQueue');
+  // This is always non-null on a ClassComponent or HostRoot
+  const queue: UpdateQueue<State> | null = workInProgress.updateQueue;
+
+  hasForceUpdate = false;
+
+  let firstBaseUpdate = queue?.firstBaseUpdate;
+  let lastBaseUpdate = queue?.lastBaseUpdate;
+
+  // Check if there are pending updates. If so, transfer them to the base queue.
+  let pendingQueue = queue?.shared.pending;
+  if (pendingQueue !== null) {
+    queue!.shared.pending = null;
+
+    // The pending queue is circular. Disconnect the pointer between first
+    // and last so that it's non-circular.
+    const lastPendingUpdate = pendingQueue!;
+    const firstPendingUpdate = lastPendingUpdate.next;
+    lastPendingUpdate.next = null;
+    // Append pending updates to base queue
+    if (lastBaseUpdate === null) {
+      firstBaseUpdate = firstPendingUpdate;
+    } else {
+      lastBaseUpdate!.next = firstPendingUpdate;
+    }
+    lastBaseUpdate = lastPendingUpdate;
+
+    // If there's a current queue, and it's different from the base queue, then
+    // we need to transfer the updates to that queue, too. Because the base
+    // queue is a singly-linked list with no cycles, we can append to both
+    // lists and take advantage of structural sharing.
+    // TODO: Pass `current` as argument
+    const current = workInProgress.alternate;
+    if (current !== null) {
+      // This is always non-null on a ClassComponent or HostRoot
+      const currentQueue: UpdateQueue<State> = current.updateQueue!;
+      const currentLastBaseUpdate = currentQueue.lastBaseUpdate;
+      if (currentLastBaseUpdate !== lastBaseUpdate) {
+        if (currentLastBaseUpdate === null) {
+          currentQueue.firstBaseUpdate = firstPendingUpdate;
+        } else {
+          currentLastBaseUpdate.next = firstPendingUpdate;
+        }
+        currentQueue.lastBaseUpdate = lastPendingUpdate;
+      }
+    }
+  }
+
+  // These values may change as we process the queue.
+  if (firstBaseUpdate !== null) {
+    // Iterate through the list of updates to compute the result.
+    let newState = queue!.baseState;
+    // TODO: Don't need to accumulate this. Instead, we can remove renderLanes
+    // from the original lanes.
+    let newLanes = NoLanes;
+
+    let newBaseState = null;
+    let newFirstBaseUpdate = null;
+    let newLastBaseUpdate = null;
+
+    let update = firstBaseUpdate;
+    do {
+      const updateLane = update!.lane;
+      const updateEventTime = update!.eventTime;
+      if (!isSubsetOfLanes(renderLanes, updateLane)) {
+        // Priority is insufficient. Skip this update. If this is the first
+        // skipped update, the previous update/state is the new base
+        // update/state.
+        const clone: Update<State> = {
+          eventTime: updateEventTime,
+          lane: updateLane,
+
+          tag: update!.tag,
+          payload: update!.payload,
+          callback: update!.callback,
+
+          next: null,
+        };
+        if (newLastBaseUpdate === null) {
+          newFirstBaseUpdate = newLastBaseUpdate = clone;
+          newBaseState = newState;
+        } else {
+          newLastBaseUpdate = (newLastBaseUpdate as Update<State>).next = clone;
+        }
+        // Update the remaining priority in the queue.
+        newLanes = mergeLanes(newLanes, updateLane);
+      } else {
+        // This update does have sufficient priority.
+
+        if (newLastBaseUpdate !== null) {
+          const clone: Update<State> = {
+            eventTime: updateEventTime,
+            // This update is going to be committed so we never want uncommit
+            // it. Using NoLane works because 0 is a subset of all bitmasks, so
+            // this will never be skipped by the check above.
+            lane: Lane.NoLane,
+
+            tag: update!.tag,
+            payload: update!.payload,
+            callback: update!.callback,
+
+            next: null,
+          };
+          newLastBaseUpdate = (newLastBaseUpdate as Update<State>).next = clone;
+        }
+
+        // Process this update.
+        newState = getStateFromUpdate(workInProgress, queue!, update!, newState, props, instance);
+        const callback = update!.callback;
+        if (
+          callback !== null &&
+          // If the update was already committed, we should not queue its
+          // callback again.
+          update!.lane !== Lane.NoLane
+        ) {
+          workInProgress.flags |= Flags.Callback;
+          const effects = queue!.effects;
+          if (effects === null) {
+            queue!.effects = [update!];
+          } else {
+            effects.push(update!);
+          }
+        }
+      }
+      update = update!.next!;
+      if (update === null) {
+        pendingQueue = queue!.shared.pending;
+        if (pendingQueue === null) {
+          break;
+        } else {
+          // An update was scheduled from inside a reducer. Add the new
+          // pending updates to the end of the list and keep processing.
+          const lastPendingUpdate = pendingQueue;
+          // Intentionally unsound. Pending updates form a circular list, but we
+          // unravel them when transferring them to the base queue.
+          const firstPendingUpdate = lastPendingUpdate.next as Update<State>;
+          lastPendingUpdate.next = null;
+          update = firstPendingUpdate;
+          queue!.lastBaseUpdate = lastPendingUpdate;
+          queue!.shared.pending = null;
+        }
+      }
+    } while (true);
+
+    if (newLastBaseUpdate === null) {
+      newBaseState = newState;
+    }
+
+    queue!.baseState = newBaseState as State;
+    queue!.firstBaseUpdate = newFirstBaseUpdate;
+    queue!.lastBaseUpdate = newLastBaseUpdate;
+
+    // Interleaved updates are stored on a separate queue. We aren't going to
+    // process them during this render, but we do need to track which lanes
+    // are remaining.
+    const lastInterleaved = queue!.shared.interleaved;
+    if (lastInterleaved !== null) {
+      let interleaved = lastInterleaved;
+      do {
+        newLanes = mergeLanes(newLanes, interleaved.lane);
+        interleaved = interleaved.next as Update<State>;
+      } while (interleaved !== lastInterleaved);
+    } else if (firstBaseUpdate === null) {
+      // `queue.lanes` is used for entangling transitions. We can set it back to
+      // zero once the queue is empty.
+      queue!.shared.lanes = NoLanes;
+    }
+
+    // Set the remaining expiration time to be whatever is remaining in the queue.
+    // This should be fine because the only two other things that contribute to
+    // expiration time are props and context. We're already in the middle of the
+    // begin phase by the time we start processing the queue, so we've already
+    // dealt with the props. Context in components that specify
+    // shouldComponentUpdate is tricky; but we'll have to account for
+    // that regardless.
+    markSkippedUpdateLanes(newLanes);
+    workInProgress.lanes = newLanes;
+    workInProgress.memoizedState = newState;
+  }
 }
 
 export function createUpdate(eventTime: number, lane: Lane): Update<any> {

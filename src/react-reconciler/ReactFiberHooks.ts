@@ -23,6 +23,7 @@ import {
   isTransitionLane,
   markRootEntangled,
   mergeLanes,
+  removeLanes,
 } from './ReactFiberLane';
 import { readContext } from './ReactFiberNewContext';
 import {
@@ -274,6 +275,16 @@ export function checkDidRenderIdHook() {
   const didRenderIdHook = localIdCounter !== 0;
   localIdCounter = 0;
   return didRenderIdHook;
+}
+
+//566
+export function bailoutHooks(current: Fiber, workInProgress: Fiber, lanes: Lanes) {
+  workInProgress.updateQueue = current.updateQueue;
+  // TODO: Don't need to reset the flags here, because they're reset in the
+  // complete phase (bubbleProperties).
+
+  workInProgress.flags &= ~(Flags.Passive | Flags.Update);
+  current.lanes = removeLanes(current.lanes, lanes);
 }
 
 // 591

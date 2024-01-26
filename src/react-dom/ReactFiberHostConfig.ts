@@ -136,6 +136,18 @@ export function getCurrentEventPriority(): Lane {
   return getEventPriority(currentEvent.type as DOMEventName);
 }
 
+export function shouldSetTextContent(type: string, props: Props): boolean {
+  return (
+    type === 'textarea' ||
+    type === 'noscript' ||
+    typeof props.children === 'string' ||
+    typeof props.children === 'number' ||
+    (typeof props.dangerouslySetInnerHTML === 'object' &&
+      props.dangerouslySetInnerHTML !== null &&
+      props.dangerouslySetInnerHTML.__html != null)
+  );
+}
+
 // -------------------
 //     Microtasks
 // -------------------
