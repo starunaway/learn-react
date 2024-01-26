@@ -61,7 +61,7 @@ function commitHookEffectListUnmount(
   const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
   if (lastEffect !== null) {
     const firstEffect = lastEffect.next;
-    let effect = firstEffect;
+    let effect = firstEffect!;
     do {
       if ((effect.tag & flags) === flags) {
         // Unmount
@@ -88,7 +88,7 @@ function commitHookEffectListUnmount(
           //   }
         }
       }
-      effect = effect.next;
+      effect = effect.next!;
     } while (effect !== firstEffect);
   }
 }
@@ -98,7 +98,7 @@ function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {
   const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
   if (lastEffect !== null) {
     const firstEffect = lastEffect.next;
-    let effect = firstEffect;
+    let effect = firstEffect!;
     do {
       if ((effect.tag & flags) === flags) {
         // read : 这里是给 devtool 用的
@@ -124,7 +124,7 @@ function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {
         //   }
         // }
       }
-      effect = effect.next;
+      effect = effect.next!;
     } while (effect !== firstEffect);
   }
 }

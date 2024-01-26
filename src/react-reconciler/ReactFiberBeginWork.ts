@@ -35,17 +35,107 @@ import {
 } from './ReactFiberNewContext';
 import { pushHostContainer, pushHostContext } from './ReactFiberHostContext';
 import { pushRootTransition } from './ReactFiberTransition';
-import { pushCacheProvider } from './ReactFiberCacheComponent';
+import { CacheContext, pushCacheProvider } from './ReactFiberCacheComponent';
 
 import { getIsHydrating, resetHydrationState } from './ReactFiberHydrationContext';
 import { markSkippedUpdateLanes } from './ReactFiberWorkLoop';
 import { stopProfilerTimerIfRunning } from './ReactProfilerTimer';
-import { cloneChildFibers } from './ReactChildFiber';
-import { getForksAtLevel, isForkedChild, pushTreeId } from './ReactFiberTreeContext';
+import { cloneChildFibers, mountChildFibers, reconcileChildFibers } from './ReactChildFiber';
+
+import {
+  getForksAtLevel,
+  isForkedChild,
+  pushMaterializedTreeId,
+  pushTreeId,
+} from './ReactFiberTreeContext';
 import { TypeOfMode } from './ReactTypeOfMode';
-import { renderWithHooks } from './ReactFiberHooks';
+import { checkDidRenderIdHook, renderWithHooks } from './ReactFiberHooks';
+import { UpdateQueue, initializeUpdateQueue } from './ReactFiberClassUpdateQueue';
+import { resolveDefaultProps } from './ReactFiberLazyComponent';
+import { RootState } from './ReactFiberRoot';
+import { supportsHydration } from '../react-dom/ReactFiberHostConfig';
 
 let didReceiveUpdate: boolean = false;
+
+// 288
+export function reconcileChildren(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  nextChildren: any,
+  renderLanes: Lanes
+) {
+  if (current === null) {
+    // If this is a fresh new component that hasn't been rendered yet, we
+    // won't update its child set by applying minimal side-effects. Instead,
+    // we will add them all to the child before it gets rendered. That means
+    // we can optimize this reconciliation pass by not tracking side-effects.
+    workInProgress.child = mountChildFibers(workInProgress, null, nextChildren, renderLanes);
+  } else {
+    // If the current child is the same as the work in progress, it means that
+    // we haven't yet started any work on these children. Therefore, we use
+    // the clone algorithm to create a copy of all the current children.
+
+    // If we had any progressed work already, that is invalid at this point so
+    // let's throw it out.
+    workInProgress.child = reconcileChildFibers(
+      workInProgress,
+      current.child,
+      nextChildren,
+      renderLanes
+    );
+  }
+}
+
+// 951
+function updateFunctionComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  Component: any,
+  nextProps: any,
+  renderLanes: Lanes
+) {
+  let context;
+  if (!disableLegacyContext) {
+    const unmaskedContext = getUnmaskedContext(workInProgress, Component, true);
+    context = getMaskedContext(workInProgress, unmaskedContext);
+  }
+
+  let nextChildren;
+  let hasId;
+  prepareToReadContext(workInProgress, renderLanes);
+  // read: 这是给 devtool 用的
+  // if (enableSchedulingProfiler) {
+  //   markComponentRenderStarted(workInProgress);
+  // }
+
+  nextChildren = renderWithHooks(
+    current,
+    workInProgress,
+    Component,
+    nextProps,
+    context,
+    renderLanes
+  );
+  hasId = checkDidRenderIdHook();
+  // read: 这是给 devtool 用的
+  // if (enableSchedulingProfiler) {
+  //   markComponentRenderStopped();
+  // }
+
+  if (current !== null && !didReceiveUpdate) {
+    bailoutHooks(current, workInProgress, renderLanes);
+    return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+  }
+
+  if (getIsHydrating() && hasId) {
+    pushMaterializedTreeId(workInProgress);
+  }
+
+  // React DevTools reads this flag.
+  workInProgress.flags |= Flags.PerformedWork;
+  reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  return workInProgress.child;
+}
 
 //1263
 function pushHostRootContext(workInProgress: Fiber) {
@@ -61,6 +151,128 @@ function pushHostRootContext(workInProgress: Fiber) {
     pushTopLevelContextObject(workInProgress, root.context, false);
   }
   pushHostContainer(workInProgress, root.containerInfo);
+}
+//1278
+function updateHostRoot(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes) {
+  pushHostRootContext(workInProgress);
+
+  if (current === null) {
+    throw new Error('Should have a current fiber. This is a bug in React.');
+  }
+
+  const nextProps = workInProgress.pendingProps;
+  const prevState = workInProgress.memoizedState;
+  const prevChildren = prevState.element;
+  cloneUpdateQueue(current, workInProgress);
+  processUpdateQueue(workInProgress, nextProps, null, renderLanes);
+
+  const nextState: RootState = workInProgress.memoizedState;
+  const root: FiberRoot = workInProgress.stateNode;
+  pushRootTransition(workInProgress, root, renderLanes);
+
+  if (enableCache) {
+    const nextCache: Cache = nextState.cache!;
+    pushCacheProvider(workInProgress, nextCache);
+    if (nextCache !== prevState.cache) {
+      // The root cache refreshed.
+      propagateContextChange(workInProgress, CacheContext, renderLanes);
+    }
+  }
+
+  // Caution: React DevTools currently depends on this property
+  // being called "element".
+  const nextChildren = nextState.element;
+  if (supportsHydration && prevState.isDehydrated) {
+    // This is a hydration root whose shell has not yet hydrated. We should
+    // attempt to hydrate.
+
+    // Flip isDehydrated to false to indicate that when this render
+    // finishes, the root will no longer be dehydrated.
+    const overrideState: RootState = {
+      element: nextChildren,
+      isDehydrated: false,
+      cache: nextState.cache,
+      pendingSuspenseBoundaries: nextState.pendingSuspenseBoundaries,
+      transitions: nextState.transitions,
+    };
+    const updateQueue: UpdateQueue<RootState> = workInProgress.updateQueue!;
+    // `baseState` can always be the last state because the root doesn't
+    // have reducer functions so it doesn't need rebasing.
+    updateQueue.baseState = overrideState;
+    workInProgress.memoizedState = overrideState;
+
+    if (workInProgress.flags & ForceClientRender) {
+      // Something errored during a previous attempt to hydrate the shell, so we
+      // forced a client render.
+      const recoverableError = createCapturedValueAtFiber(
+        new Error(
+          'There was an error while hydrating. Because the error happened outside ' +
+            'of a Suspense boundary, the entire root will switch to ' +
+            'client rendering.'
+        ),
+        workInProgress
+      );
+      return mountHostRootWithoutHydrating(
+        current,
+        workInProgress,
+        nextChildren,
+        renderLanes,
+        recoverableError
+      );
+    } else if (nextChildren !== prevChildren) {
+      const recoverableError = createCapturedValueAtFiber(
+        new Error(
+          'This root received an early update, before anything was able ' +
+            'hydrate. Switched the entire root to client rendering.'
+        ),
+        workInProgress
+      );
+      return mountHostRootWithoutHydrating(
+        current,
+        workInProgress,
+        nextChildren,
+        renderLanes,
+        recoverableError
+      );
+    } else {
+      // The outermost shell has not hydrated yet. Start hydrating.
+      enterHydrationState(workInProgress);
+      if (enableUseMutableSource) {
+        const mutableSourceEagerHydrationData = root.mutableSourceEagerHydrationData;
+        if (mutableSourceEagerHydrationData != null) {
+          for (let i = 0; i < mutableSourceEagerHydrationData.length; i += 2) {
+            const mutableSource = mutableSourceEagerHydrationData[i] as MutableSource<any>;
+            const version = mutableSourceEagerHydrationData[i + 1];
+            setWorkInProgressVersion(mutableSource, version);
+          }
+        }
+      }
+
+      const child = mountChildFibers(workInProgress, null, nextChildren, renderLanes);
+      workInProgress.child = child;
+
+      let node = child;
+      while (node) {
+        // Mark each child as hydrating. This is a fast path to know whether this
+        // tree is part of a hydrating tree. This is used to determine if a child
+        // node has fully mounted yet, and for scheduling event replaying.
+        // Conceptually this is similar to Placement in that a new subtree is
+        // inserted into the React tree here. It just happens to not need DOM
+        // mutations because it already exists.
+        node.flags = (node.flags & ~Placement) | Hydrating;
+        node = node.sibling;
+      }
+    }
+  } else {
+    // Root is not dehydrated. Either this is a client-only root, or it
+    // already hydrated.
+    resetHydrationState();
+    if (nextChildren === prevChildren) {
+      return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+    }
+    reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  }
+  return workInProgress.child;
 }
 
 // 1618
@@ -89,6 +301,7 @@ function mountIndeterminateComponent(
   // }
 
   value = renderWithHooks(null, workInProgress, Component, props, context, renderLanes);
+  console.log('renderWithHooks 的返回值应该就是组件的 return 结果，应该是个 fiber：', value);
   hasId = checkDidRenderIdHook();
   // read: devtools 才使用
   // if (enableSchedulingProfiler) {
@@ -104,32 +317,33 @@ function mountIndeterminateComponent(
     typeof value.render === 'function' &&
     value.$$typeof === undefined
   ) {
-    // Proceed under the assumption that this is a class instance
-    workInProgress.tag = WorkTag.ClassComponent;
+    console.error('这里是类组件，讲道理FC 的逻辑不会走到这里。如果走到这里，需要补齐逻辑了');
+    // // Proceed under the assumption that this is a class instance
+    // workInProgress.tag = WorkTag.ClassComponent;
 
-    // Throw out any hooks that were used.
-    workInProgress.memoizedState = null;
-    workInProgress.updateQueue = null;
+    // // Throw out any hooks that were used.
+    // workInProgress.memoizedState = null;
+    // workInProgress.updateQueue = null;
 
-    // Push context providers early to prevent context stack mismatches.
-    // During mounting we don't know the child context yet as the instance doesn't exist.
-    // We will invalidate the child context in finishClassComponent() right after rendering.
-    let hasContext = false;
-    if (isLegacyContextProvider(Component)) {
-      hasContext = true;
-      pushLegacyContextProvider(workInProgress);
-    } else {
-      hasContext = false;
-    }
+    // // Push context providers early to prevent context stack mismatches.
+    // // During mounting we don't know the child context yet as the instance doesn't exist.
+    // // We will invalidate the child context in finishClassComponent() right after rendering.
+    // let hasContext = false;
+    // if (isLegacyContextProvider(Component)) {
+    //   hasContext = true;
+    //   pushLegacyContextProvider(workInProgress);
+    // } else {
+    //   hasContext = false;
+    // }
 
-    workInProgress.memoizedState =
-      value.state !== null && value.state !== undefined ? value.state : null;
+    // workInProgress.memoizedState =
+    //   value.state !== null && value.state !== undefined ? value.state : null;
 
-    initializeUpdateQueue(workInProgress);
+    // initializeUpdateQueue(workInProgress);
 
-    adoptClassInstance(workInProgress, value);
-    mountClassInstance(workInProgress, Component, props, renderLanes);
-    return finishClassComponent(null, workInProgress, Component, true, hasContext, renderLanes);
+    // adoptClassInstance(workInProgress, value);
+    // mountClassInstance(workInProgress, Component, props, renderLanes);
+    // return finishClassComponent(null, workInProgress, Component, true, hasContext, renderLanes);
   } else {
     // Proceed under the assumption that this is a function component
     workInProgress.tag = WorkTag.FunctionComponent;
@@ -526,7 +740,12 @@ function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: La
   switch (workInProgress.tag) {
     case WorkTag.IndeterminateComponent: {
       console.log('begin 当前 Fiber 是 IndeterminateComponent');
-      return mountIndeterminateComponent(current, workInProgress, workInProgress.type, renderLanes);
+      return mountIndeterminateComponent(
+        current,
+        workInProgress,
+        workInProgress.type,
+        renderLanes
+      )!;
     }
     // case WorkTag.LazyComponent: {
     //   const elementType = workInProgress.elementType;
@@ -547,15 +766,15 @@ function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: La
         renderLanes
       );
     }
-    case WorkTag.ClassComponent: {
-      const Component = workInProgress.type;
-      const unresolvedProps = workInProgress.pendingProps;
-      const resolvedProps =
-        workInProgress.elementType === Component
-          ? unresolvedProps
-          : resolveDefaultProps(Component, unresolvedProps);
-      return updateClassComponent(current, workInProgress, Component, resolvedProps, renderLanes);
-    }
+    // case WorkTag.ClassComponent: {
+    //   const Component = workInProgress.type;
+    //   const unresolvedProps = workInProgress.pendingProps;
+    //   const resolvedProps =
+    //     workInProgress.elementType === Component
+    //       ? unresolvedProps
+    //       : resolveDefaultProps(Component, unresolvedProps);
+    //   return updateClassComponent(current, workInProgress, Component, resolvedProps, renderLanes);
+    // }
     case WorkTag.HostRoot:
       return updateHostRoot(current, workInProgress, renderLanes);
     case WorkTag.HostComponent:
@@ -583,26 +802,26 @@ function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: La
     //   return updateProfiler(current, workInProgress, renderLanes);
     case WorkTag.ContextProvider:
       return updateContextProvider(current, workInProgress, renderLanes);
-    case WorkTag.ContextConsumer:
-      return updateContextConsumer(current, workInProgress, renderLanes);
-    case WorkTag.MemoComponent: {
-      const type = workInProgress.type;
-      const unresolvedProps = workInProgress.pendingProps;
-      // Resolve outer props first, then resolve inner props.
-      let resolvedProps = resolveDefaultProps(type, unresolvedProps);
+    // case WorkTag.ContextConsumer:
+    //   return updateContextConsumer(current, workInProgress, renderLanes);
+    // case WorkTag.MemoComponent: {
+    //   const type = workInProgress.type;
+    //   const unresolvedProps = workInProgress.pendingProps;
+    //   // Resolve outer props first, then resolve inner props.
+    //   let resolvedProps = resolveDefaultProps(type, unresolvedProps);
 
-      resolvedProps = resolveDefaultProps(type.type, resolvedProps);
-      return updateMemoComponent(current, workInProgress, type, resolvedProps, renderLanes);
-    }
-    case WorkTag.SimpleMemoComponent: {
-      return updateSimpleMemoComponent(
-        current,
-        workInProgress,
-        workInProgress.type,
-        workInProgress.pendingProps,
-        renderLanes
-      );
-    }
+    //   resolvedProps = resolveDefaultProps(type.type, resolvedProps);
+    //   return updateMemoComponent(current, workInProgress, type, resolvedProps, renderLanes);
+    // }
+    // case WorkTag.SimpleMemoComponent: {
+    //   return updateSimpleMemoComponent(
+    //     current,
+    //     workInProgress,
+    //     workInProgress.type,
+    //     workInProgress.pendingProps,
+    //     renderLanes
+    //   );
+    // }
     // case WorkTag.IncompleteClassComponent: {
     //   const Component = workInProgress.type;
     //   const unresolvedProps = workInProgress.pendingProps;

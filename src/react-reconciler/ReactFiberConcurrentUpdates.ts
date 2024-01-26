@@ -56,6 +56,48 @@ export function finishQueueingConcurrentUpdates() {
   }
 }
 
+export function enqueueConcurrentHookUpdate<S, A>(
+  fiber: Fiber,
+  queue: HookQueue<S, A>,
+  update: HookUpdate<S, A>,
+  lane: Lane
+) {
+  const interleaved = queue.interleaved;
+  if (interleaved === null) {
+    // This is the first update. Create a circular list.
+    update.next = update;
+    // At the end of the current render, this queue's interleaved updates will
+    // be transferred to the pending queue.
+    pushConcurrentUpdateQueue(queue);
+  } else {
+    update.next = interleaved.next;
+    interleaved.next = update;
+  }
+  queue.interleaved = update;
+
+  return markUpdateLaneFromFiberToRoot(fiber, lane);
+}
+
+export function enqueueConcurrentHookUpdateAndEagerlyBailout<S, A>(
+  fiber: Fiber,
+  queue: HookQueue<S, A>,
+  update: HookUpdate<S, A>,
+  lane: Lane
+): void {
+  const interleaved = queue.interleaved;
+  if (interleaved === null) {
+    // This is the first update. Create a circular list.
+    update.next = update;
+    // At the end of the current render, this queue's interleaved updates will
+    // be transferred to the pending queue.
+    pushConcurrentUpdateQueue(queue);
+  } else {
+    update.next = interleaved.next;
+    interleaved.next = update;
+  }
+  queue.interleaved = update;
+}
+
 export function enqueueConcurrentClassUpdate<State>(
   fiber: Fiber,
   queue: ClassQueue<State>,

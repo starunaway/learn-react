@@ -54,6 +54,29 @@ export function popTreeContext(workInProgress: Fiber) {
   }
 }
 
+export function pushTreeFork(workInProgress: Fiber, totalChildren: number): void {
+  // This is called right after we reconcile an array (or iterator) of child
+  // fibers, because that's the only place where we know how many children in
+  // the whole set without doing extra work later, or storing addtional
+  // information on the fiber.
+  //
+  // That's why this function is separate from pushTreeId — it's called during
+  // the render phase of the fork parent, not the child, which is where we push
+  // the other context values.
+  //
+  // In the Fizz implementation this is much simpler because the child is
+  // rendered in the same callstack as the parent.
+  //
+  // It might be better to just add a `forks` field to the Fiber type. It would
+  // make this module simpler.
+
+  forkStack[forkStackIndex++] = treeForkCount;
+  forkStack[forkStackIndex++] = treeForkProvider;
+
+  treeForkProvider = workInProgress;
+  treeForkCount = totalChildren;
+}
+
 export function pushTreeId(workInProgress: Fiber, totalChildren: number, index: number) {
   idStack[idStackIndex++] = treeContextId;
   idStack[idStackIndex++] = treeContextOverflow;
@@ -117,6 +140,18 @@ export function pushTreeId(workInProgress: Fiber, totalChildren: number, index: 
 
     treeContextId = (1 << length) | id;
     treeContextOverflow = overflow;
+  }
+}
+
+export function pushMaterializedTreeId(workInProgress: Fiber) {
+  // This component materialized an id. This will affect any ids that appear
+  // in its children.
+  const returnFiber = workInProgress.return;
+  if (returnFiber !== null) {
+    const numberOfForks = 1;
+    const slotIndex = 0;
+    pushTreeFork(workInProgress, numberOfForks);
+    pushTreeId(workInProgress, numberOfForks, slotIndex);
   }
 }
 
