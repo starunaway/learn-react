@@ -5,8 +5,27 @@ import { TypeOfMode } from './ReactTypeOfMode';
 import { WorkTag } from './ReactWorkTags';
 import { Lanes, NoLanes } from './ReactFiberLane';
 import { Flags, StaticMask } from './ReactFiberFlags';
-import { RefObject } from '../shared/ReactTypes';
-import { enableProfilerTimer } from '../shared/ReactFeatureFlags';
+import { ReactFragment, RefObject } from '../shared/ReactTypes';
+import { enableCache, enableProfilerTimer } from '../shared/ReactFeatureFlags';
+import { ReactElement } from '../shared/ReactElementType';
+import {
+  REACT_CACHE_TYPE,
+  REACT_CONTEXT_TYPE,
+  REACT_DEBUG_TRACING_MODE_TYPE,
+  REACT_FORWARD_REF_TYPE,
+  REACT_FRAGMENT_TYPE,
+  REACT_LAZY_TYPE,
+  REACT_LEGACY_HIDDEN_TYPE,
+  REACT_MEMO_TYPE,
+  REACT_OFFSCREEN_TYPE,
+  REACT_PROFILER_TYPE,
+  REACT_PROVIDER_TYPE,
+  REACT_SCOPE_TYPE,
+  REACT_STRICT_MODE_TYPE,
+  REACT_SUSPENSE_LIST_TYPE,
+  REACT_SUSPENSE_TYPE,
+  REACT_TRACING_MARKER_TYPE,
+} from '../shared/ReactSymbols';
 
 // function FiberNode(tag: WorkTag, pendingProps: mixed, key: null | string, mode: TypeOfMode) {
 //   // Instance
@@ -102,7 +121,7 @@ class FiberNode {
   selfBaseDuration?: number;
   treeBaseDuration?: number;
 
-  constructor(tag: WorkTag, pendingProps: mixed | null, key: null | string, mode: TypeOfMode) {
+  constructor(tag: WorkTag, pendingProps: any, key: null | string, mode: TypeOfMode) {
     this.tag = tag;
     this.key = key;
     this.elementType = null;
@@ -172,7 +191,7 @@ class FiberNode {
 //    compatible.
 const createFiber = function (
   tag: WorkTag,
-  pendingProps: mixed | null,
+  pendingProps: any,
   key: null | string,
   mode: TypeOfMode
 ): Fiber {
@@ -270,4 +289,137 @@ export function createHostRootFiber(
   }
 
   return createFiber(WorkTag.HostRoot, null, null, mode);
+}
+
+// 468
+export function createFiberFromTypeAndProps(
+  type: any, // React$ElementType
+  key: null | string,
+  pendingProps: any,
+  owner: null | Fiber,
+  mode: TypeOfMode,
+  lanes: Lanes
+): Fiber {
+  let fiberTag = WorkTag.IndeterminateComponent;
+  // The resolved type is set if we know what the final type will be. I.e. it's not lazy.
+  let resolvedType = type;
+  if (typeof type === 'function') {
+    if (shouldConstruct(type)) {
+      fiberTag = WorkTag.ClassComponent;
+    } else {
+    }
+  } else if (typeof type === 'string') {
+    fiberTag = WorkTag.HostComponent;
+  } else {
+    getTag: switch (type) {
+      case REACT_FRAGMENT_TYPE:
+        return createFiberFromFragment(pendingProps.children, mode, lanes, key);
+      case REACT_STRICT_MODE_TYPE:
+        fiberTag = WorkTag.Mode;
+        mode |= TypeOfMode.StrictLegacyMode;
+        if ((mode & TypeOfMode.ConcurrentMode) !== TypeOfMode.NoMode) {
+          // Strict effects should never run on legacy roots
+          mode |= TypeOfMode.StrictEffectsMode;
+        }
+        break;
+      case REACT_PROFILER_TYPE:
+        return createFiberFromProfiler(pendingProps, mode, lanes, key);
+      case REACT_SUSPENSE_TYPE:
+        return createFiberFromSuspense(pendingProps, mode, lanes, key);
+      case REACT_SUSPENSE_LIST_TYPE:
+        return createFiberFromSuspenseList(pendingProps, mode, lanes, key);
+      case REACT_OFFSCREEN_TYPE:
+        return createFiberFromOffscreen(pendingProps, mode, lanes, key);
+      case REACT_LEGACY_HIDDEN_TYPE:
+
+      // eslint-disable-next-line no-fallthrough
+      case REACT_SCOPE_TYPE:
+
+      // eslint-disable-next-line no-fallthrough
+      case REACT_CACHE_TYPE:
+        if (enableCache) {
+          return createFiberFromCache(pendingProps, mode, lanes, key);
+        }
+      // eslint-disable-next-line no-fallthrough
+      case REACT_TRACING_MARKER_TYPE:
+
+      // eslint-disable-next-line no-fallthrough
+      case REACT_DEBUG_TRACING_MODE_TYPE:
+
+      // eslint-disable-next-line no-fallthrough
+      default: {
+        if (typeof type === 'object' && type !== null) {
+          switch (type.$$typeof) {
+            case REACT_PROVIDER_TYPE:
+              fiberTag = WorkTag.ContextProvider;
+              break getTag;
+            case REACT_CONTEXT_TYPE:
+              // This is a consumer
+              fiberTag = WorkTag.ContextConsumer;
+              break getTag;
+            case REACT_FORWARD_REF_TYPE:
+              fiberTag = WorkTag.ForwardRef;
+
+              break getTag;
+            case REACT_MEMO_TYPE:
+              fiberTag = WorkTag.MemoComponent;
+              break getTag;
+            case REACT_LAZY_TYPE:
+              fiberTag = WorkTag.LazyComponent;
+              resolvedType = null;
+              break getTag;
+          }
+        }
+        let info = '';
+
+        throw new Error(
+          'Element type is invalid: expected a string (for built-in ' +
+            'components) or a class/function (for composite components) ' +
+            `but got: ${type == null ? type : typeof type}.${info}`
+        );
+      }
+    }
+  }
+
+  const fiber = createFiber(fiberTag, pendingProps, key, mode);
+  fiber.elementType = type;
+  fiber.type = resolvedType;
+  fiber.lanes = lanes;
+
+  return fiber;
+}
+
+// 604
+export function createFiberFromElement(
+  element: ReactElement,
+  mode: TypeOfMode,
+  lanes: Lanes
+): Fiber {
+  let owner = null;
+
+  const type = element.type;
+  const key = element.key;
+  const pendingProps = element.props;
+  const fiber = createFiberFromTypeAndProps(type, key, pendingProps, owner, mode, lanes);
+
+  return fiber;
+}
+
+// 631
+export function createFiberFromFragment(
+  elements: ReactFragment,
+  mode: TypeOfMode,
+  lanes: Lanes,
+  key: null | string
+): Fiber {
+  const fiber = createFiber(WorkTag.Fragment, elements, key, mode);
+  fiber.lanes = lanes;
+  return fiber;
+}
+
+// 760
+export function createFiberFromText(content: string, mode: TypeOfMode, lanes: Lanes): Fiber {
+  const fiber = createFiber(WorkTag.HostText, content, null, mode);
+  fiber.lanes = lanes;
+  return fiber;
 }
