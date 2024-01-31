@@ -7,6 +7,11 @@ import {
 import { listenToNonDelegatedEvent } from './events/DOMPluginEventSystem';
 import { registrationNameDependencies } from './events/EventRegistry';
 import { track } from './inputValueTracking';
+import setTextContent from './setTextContent';
+import { setValueForStyles } from './CSSPropertyOperations';
+
+import { setValueForProperty } from './DOMPropertyOperations';
+
 import { HTML_NAMESPACE, getIntrinsicNamespace } from './shared/DOMNamespaces';
 import isCustomComponent from './shared/isCustomComponent';
 
@@ -80,10 +85,12 @@ function setInitialDOMProperties(
       // Relies on `updateStylesByID` not mutating `styleUpdates`.
       setValueForStyles(domElement, nextProp);
     } else if (propKey === DANGEROUSLY_SET_INNER_HTML) {
-      const nextHtml = nextProp ? nextProp[HTML] : undefined;
-      if (nextHtml != null) {
-        setInnerHTML(domElement, nextHtml);
-      }
+      console.error('setInitialDOMProperties：dangerous html 属性，需要实现');
+
+      // const nextHtml = nextProp ? nextProp[HTML] : undefined;
+      // if (nextHtml != null) {
+      //   setInnerHTML(domElement, nextHtml);
+      // }
     } else if (propKey === CHILDREN) {
       if (typeof nextProp === 'string') {
         // Avoid setting initial textContent when the text is empty. In IE11 setting
@@ -132,7 +139,8 @@ function updateDOMProperties(
     if (propKey === STYLE) {
       setValueForStyles(domElement, propValue);
     } else if (propKey === DANGEROUSLY_SET_INNER_HTML) {
-      setInnerHTML(domElement, propValue);
+      console.error('updateDOMProperties：dangerous html 属性，需要实现');
+      // setInnerHTML(domElement, propValue);
     } else if (propKey === CHILDREN) {
       setTextContent(domElement, propValue);
     } else {
