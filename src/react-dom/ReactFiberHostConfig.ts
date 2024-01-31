@@ -2,6 +2,13 @@ import { EventPriority } from '../react-reconciler/ReactEventPriorities';
 import { Lane } from '../react-reconciler/ReactFiberLane';
 import { FiberRoot } from '../react-reconciler/ReactInternalTypes';
 import { mixed } from '../types';
+import {
+  createElement,
+  createTextNode,
+  diffProperties,
+  setInitialProperties,
+} from './ReactDOMComponent';
+import { precacheFiberNode, updateFiberProps } from './ReactDOMComponentTree';
 import { DOMEventName } from './events/DOMEventNames';
 import { getEventPriority } from './events/ReactDOMEventListener';
 import { getChildNamespace } from './shared/DOMNamespaces';
@@ -84,6 +91,17 @@ export function getParentSuspenseInstance(targetInstance: Node): null | Suspense
   return null;
 }
 
+export function prepareUpdate(
+  domElement: Instance,
+  type: string,
+  oldProps: Props,
+  newProps: Props,
+  rootContainerInstance: Container,
+  hostContext: HostContext
+): null | Array<mixed> {
+  return diffProperties(domElement, type, oldProps, newProps, rootContainerInstance);
+}
+
 export function getChildHostContext(
   parentHostContext: HostContext,
   type: string,
@@ -91,6 +109,58 @@ export function getChildHostContext(
 ): HostContext {
   const parentNamespace = parentHostContext as HostContextProd;
   return getChildNamespace(parentNamespace, type);
+}
+
+export function createInstance(
+  type: string,
+  props: Props,
+  rootContainerInstance: Container,
+  hostContext: HostContext,
+  internalInstanceHandle: Object
+): Instance {
+  let parentNamespace: string;
+
+  parentNamespace = hostContext as HostContextProd;
+  const domElement: Instance = createElement(type, props, rootContainerInstance, parentNamespace);
+  precacheFiberNode(internalInstanceHandle as any, domElement);
+  updateFiberProps(domElement, props);
+  return domElement;
+}
+
+export function appendInitialChild(parentInstance: Instance, child: Instance | TextInstance): void {
+  parentInstance.appendChild(child);
+}
+
+export function finalizeInitialChildren(
+  domElement: Instance,
+  type: string,
+  props: Props,
+  rootContainerInstance: Container,
+  hostContext: HostContext
+): boolean {
+  setInitialProperties(domElement, type, props, rootContainerInstance);
+  switch (type) {
+    case 'button':
+    case 'input':
+    case 'select':
+    case 'textarea':
+      return !!props.autoFocus;
+    case 'img':
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function createTextInstance(
+  text: string,
+  rootContainerInstance: Container,
+  hostContext: HostContext,
+  internalInstanceHandle: Object
+): TextInstance {
+  const textNode: TextInstance = createTextNode(text, rootContainerInstance);
+  precacheFiberNode(internalInstanceHandle as any, textNode);
+  return textNode;
 }
 
 export function getRootHostContext(rootContainerInstance: Container): HostContext {
@@ -154,3 +224,9 @@ export function shouldSetTextContent(type: string, props: Props): boolean {
 export const supportsMicrotasks = true;
 export const scheduleMicrotask: any = queueMicrotask;
 export { detachDeletedInstance } from './ReactDOMComponentTree';
+
+// -------------------
+//     Mutation
+// -------------------
+
+export const supportsMutation = true;

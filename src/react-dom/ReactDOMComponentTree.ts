@@ -112,6 +112,27 @@ export function getClosestInstanceFromNode(targetNode: Node & mixed): null | Fib
   return null;
 }
 
+export function getEventListenerSet(node: EventTarget): Set<string> {
+  let elementListenerSet = (node as any)[internalEventHandlersKey];
+  if (elementListenerSet === undefined) {
+    elementListenerSet = (node as any)[internalEventHandlersKey] = new Set();
+  }
+  return elementListenerSet;
+}
+
+export function updateFiberProps(
+  node: Instance | TextInstance | SuspenseInstance,
+  props: Props
+): void {
+  (node as any)[internalPropsKey] = props;
+}
+export function precacheFiberNode(
+  hostInst: Fiber,
+  node: Instance | TextInstance | SuspenseInstance | ReactScopeInstance
+): void {
+  (node as any)[internalInstanceKey] = hostInst;
+}
+
 /**
  * Given a DOM node, return the ReactDOMComponent or ReactDOMTextComponent
  * instance, or null if the node was not rendered by this React.

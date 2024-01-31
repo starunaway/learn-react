@@ -1,7 +1,11 @@
 import { Fiber } from '../../react-reconciler/ReactInternalTypes';
 import { WorkTag } from '../../react-reconciler/ReactWorkTags';
 import { mixed } from '../../types';
-import { getClosestInstanceFromNode, getEventHandlerListeners } from '../ReactDOMComponentTree';
+import {
+  getClosestInstanceFromNode,
+  getEventHandlerListeners,
+  getEventListenerSet,
+} from '../ReactDOMComponentTree';
 import { DOMEventName } from './DOMEventNames';
 import { batchedUpdates } from './ReactDOMUpdateBatching';
 import getEventTarget from './getEventTarget';
@@ -299,6 +303,25 @@ function dispatchEventsForPlugins(
     targetContainer
   );
   processDispatchQueue(dispatchQueue, eventSystemFlags);
+}
+
+//监听非委托事件
+export function listenToNonDelegatedEvent(
+  domEventName: DOMEventName,
+  targetElement: Element
+): void {
+  const isCapturePhaseListener = false;
+  const listenerSet = getEventListenerSet(targetElement);
+  const listenerSetKey = getListenerSetKey(domEventName, isCapturePhaseListener);
+  if (!listenerSet.has(listenerSetKey)) {
+    addTrappedEventListener(
+      targetElement,
+      domEventName,
+      EventSystemFlags.IS_NON_DELEGATED,
+      isCapturePhaseListener
+    );
+    listenerSet.add(listenerSetKey);
+  }
 }
 
 /**
@@ -604,4 +627,8 @@ export function accumulateEventHandleNonManagedNodeListeners(
     });
   }
   return listeners;
+}
+
+export function getListenerSetKey(domEventName: DOMEventName, capture: boolean): string {
+  return `${domEventName}__${capture ? 'capture' : 'bubble'}`;
 }
