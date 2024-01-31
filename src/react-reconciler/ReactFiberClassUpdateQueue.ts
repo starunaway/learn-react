@@ -117,6 +117,8 @@ function getStateFromUpdate<State>(
     }
     case QueueUpdateState.CaptureUpdate: {
       workInProgress.flags = (workInProgress.flags & ~Flags.ShouldCapture) | Flags.DidCapture;
+      //read:源码中这里没有返回，这里是为了避免 ts 报错
+      return;
     }
     // Intentional fallthrough
     case QueueUpdateState.UpdateState: {
