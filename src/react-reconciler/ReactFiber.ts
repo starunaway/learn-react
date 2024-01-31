@@ -199,6 +199,13 @@ const createFiber = function (
   return new FiberNode(tag, pendingProps, key, mode) as unknown as Fiber;
 };
 
+//220
+function shouldConstruct(Component: Function) {
+  console.log('这里是判断类组件还是函数组件');
+  const prototype = Component.prototype;
+  return !!(prototype && prototype.isReactComponent);
+}
+
 // This is used to create an alternate fiber to do work on.
 export function createWorkInProgress(current: Fiber, pendingProps: any): Fiber {
   let workInProgress = current.alternate;
@@ -299,7 +306,7 @@ export function createFiberFromTypeAndProps(
   owner: null | Fiber,
   mode: TypeOfMode,
   lanes: Lanes
-): Fiber {
+): Fiber | null {
   let fiberTag = WorkTag.IndeterminateComponent;
   // The resolved type is set if we know what the final type will be. I.e. it's not lazy.
   let resolvedType = type;
@@ -323,13 +330,25 @@ export function createFiberFromTypeAndProps(
         }
         break;
       case REACT_PROFILER_TYPE:
-        return createFiberFromProfiler(pendingProps, mode, lanes, key);
+        console.error('createFiberFromTypeAndProps -> REACT_PROFILER_TYPE 未实现');
+        // return createFiberFromProfiler(pendingProps, mode, lanes, key);
+        return null;
       case REACT_SUSPENSE_TYPE:
-        return createFiberFromSuspense(pendingProps, mode, lanes, key);
+        console.error('createFiberFromTypeAndProps -> REACT_SUSPENSE_TYPE 未实现');
+        return null;
+
+      // return createFiberFromSuspense(pendingProps, mode, lanes, key);
+
       case REACT_SUSPENSE_LIST_TYPE:
-        return createFiberFromSuspenseList(pendingProps, mode, lanes, key);
+        console.error('createFiberFromTypeAndProps -> REACT_SUSPENSE_LIST_TYPE 未实现');
+        return null;
+
+      // return createFiberFromSuspenseList(pendingProps, mode, lanes, key);
       case REACT_OFFSCREEN_TYPE:
-        return createFiberFromOffscreen(pendingProps, mode, lanes, key);
+        console.error('createFiberFromTypeAndProps -> REACT_OFFSCREEN_TYPE 未实现');
+        return null;
+
+      // return createFiberFromOffscreen(pendingProps, mode, lanes, key);
       case REACT_LEGACY_HIDDEN_TYPE:
 
       // eslint-disable-next-line no-fallthrough
@@ -337,9 +356,7 @@ export function createFiberFromTypeAndProps(
 
       // eslint-disable-next-line no-fallthrough
       case REACT_CACHE_TYPE:
-        if (enableCache) {
-          return createFiberFromCache(pendingProps, mode, lanes, key);
-        }
+        return createFiberFromCache(pendingProps, mode, lanes, key);
       // eslint-disable-next-line no-fallthrough
       case REACT_TRACING_MARKER_TYPE:
 
@@ -402,7 +419,7 @@ export function createFiberFromElement(
   const pendingProps = element.props;
   const fiber = createFiberFromTypeAndProps(type, key, pendingProps, owner, mode, lanes);
 
-  return fiber;
+  return fiber!;
 }
 
 // 631
@@ -413,6 +430,19 @@ export function createFiberFromFragment(
   key: null | string
 ): Fiber {
   const fiber = createFiber(WorkTag.Fragment, elements, key, mode);
+  fiber.lanes = lanes;
+  return fiber;
+}
+
+// 737
+export function createFiberFromCache(
+  pendingProps: any,
+  mode: TypeOfMode,
+  lanes: Lanes,
+  key: null | string
+) {
+  const fiber = createFiber(WorkTag.CacheComponent, pendingProps, key, mode);
+  fiber.elementType = REACT_CACHE_TYPE;
   fiber.lanes = lanes;
   return fiber;
 }

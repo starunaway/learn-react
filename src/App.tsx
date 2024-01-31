@@ -147,4 +147,15 @@ function App({ name }: { name: string }) {
  * 
  */
 // 2. children 默认下，组件是否被 memo。和 diff 相关
-export default App;
+
+function App1({ name }: { name: string }) {
+  return (
+    <div className="App">
+      <button>外面 click。长度+1 影响最上面和 Leng 的数字</button>
+      <h5>{name}</h5>
+      <input></input>
+    </div>
+  );
+}
+
+export default App1;
