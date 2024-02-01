@@ -417,3 +417,35 @@ export function entangleTransitions(root: FiberRoot, fiber: Fiber, lane: Lane) {
     markRootEntangled(root, newQueueLanes);
   }
 }
+
+// 658
+function callCallback(callback: Function | null, context: any) {
+  if (typeof callback !== 'function') {
+    throw new Error(
+      'Invalid argument passed as callback. Expected a function. Instead ' + `received: ${callback}`
+    );
+  }
+
+  callback.call(context);
+}
+
+// 677
+export function commitUpdateQueue<State>(
+  finishedWork: Fiber,
+  finishedQueue: UpdateQueue<State>,
+  instance: any
+): void {
+  // Commit the effects
+  const effects = finishedQueue.effects;
+  finishedQueue.effects = null;
+  if (effects !== null) {
+    for (let i = 0; i < effects.length; i++) {
+      const effect = effects[i];
+      const callback = effect.callback;
+      if (callback !== null) {
+        effect.callback = null;
+        callCallback(callback, instance);
+      }
+    }
+  }
+}

@@ -31,6 +31,12 @@ let layoutEffectStartTime: number = -1;
 let profilerStartTime: number = -1;
 let passiveEffectStartTime: number = -1;
 
+function markNestedUpdateScheduled(): void {
+  if (enableProfilerNestedUpdatePhase) {
+    nestedUpdateScheduled = true;
+  }
+}
+
 function resetNestedUpdateFlag(): void {
   if (enableProfilerNestedUpdatePhase) {
     currentUpdateIsNested = false;
@@ -81,6 +87,12 @@ function recordPassiveEffectDuration(fiber: Fiber): void {
   }
 }
 
+function recordCommitTime(): void {
+  if (!enableProfilerTimer) {
+    return;
+  }
+  commitTime = now();
+}
 function startProfilerTimer(fiber: Fiber): void {
   if (!enableProfilerTimer) {
     return;
@@ -120,6 +132,13 @@ function startPassiveEffectTimer(): void {
   //   passiveEffectStartTime = now();
 }
 
+function startLayoutEffectTimer(): void {
+  if (!enableProfilerTimer || !enableProfilerCommitHooks) {
+    return;
+  }
+  layoutEffectStartTime = now();
+}
+
 function stopProfilerTimerIfRunning(fiber: Fiber): void {
   if (!enableProfilerTimer) {
     return;
@@ -127,9 +146,42 @@ function stopProfilerTimerIfRunning(fiber: Fiber): void {
   profilerStartTime = -1;
 }
 
+function recordLayoutEffectDuration(fiber: Fiber): void {
+  if (!enableProfilerTimer || !enableProfilerCommitHooks) {
+    return;
+  }
+
+  if (layoutEffectStartTime >= 0) {
+    const elapsedTime = now() - layoutEffectStartTime;
+
+    layoutEffectStartTime = -1;
+
+    // Store duration on the next nearest Profiler ancestor
+    // Or the root (for the DevTools Profiler to read)
+    let parentFiber = fiber.return;
+    while (parentFiber !== null) {
+      switch (parentFiber.tag) {
+        case WorkTag.HostRoot:
+          const root = parentFiber.stateNode;
+          root.effectDuration += elapsedTime;
+          return;
+        case WorkTag.Profiler:
+          const parentStateNode = parentFiber.stateNode;
+          parentStateNode.effectDuration += elapsedTime;
+          return;
+      }
+      parentFiber = parentFiber.return;
+    }
+  }
+}
+
 export {
+  recordCommitTime,
   resetNestedUpdateFlag,
   startProfilerTimer,
+  startLayoutEffectTimer,
+  recordLayoutEffectDuration,
+  markNestedUpdateScheduled,
   syncNestedUpdateFlag,
   startPassiveEffectTimer,
   recordPassiveEffectDuration,

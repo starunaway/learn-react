@@ -1,4 +1,4 @@
-import { setOffsets } from './ReactDOMSelection';
+import { getOffsets, setOffsets } from './ReactDOMSelection';
 import { SelectionInformation } from './ReactFiberHostConfig';
 import getActiveElement from './getActiveElement';
 
@@ -77,6 +77,14 @@ export function hasSelectionCapabilities(elem: any) {
   );
 }
 
+export function getSelectionInformation() {
+  const focusedElem = getActiveElementDeep() as HTMLElement;
+  return {
+    focusedElem: focusedElem || null,
+    selectionRange: hasSelectionCapabilities(focusedElem) ? getSelection(focusedElem) : null,
+  } as SelectionInformation;
+}
+
 /**
  * @restoreSelection: If any selection information was potentially lost,
  * restore it. This is useful when performing operations that could remove dom
@@ -114,6 +122,29 @@ export function restoreSelection(priorSelectionInformation: SelectionInformation
       info.element.scrollTop = info.top;
     }
   }
+}
+
+/**
+ * @getSelection: Gets the selection bounds of a focused textarea, input or
+ * contentEditable node.
+ * -@input: Look up selection bounds of this input
+ * -@return {start: selectionStart, end: selectionEnd}
+ */
+export function getSelection(input: any) {
+  let selection;
+
+  if ('selectionStart' in input) {
+    // Modern browser with input or textarea.
+    selection = {
+      start: input.selectionStart,
+      end: input.selectionEnd,
+    };
+  } else {
+    // Content editable or old IE textarea.
+    selection = getOffsets(input);
+  }
+
+  return selection || { start: 0, end: 0 };
 }
 
 /**

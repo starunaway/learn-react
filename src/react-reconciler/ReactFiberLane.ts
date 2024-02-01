@@ -354,6 +354,38 @@ export function markStarvedLanesAsExpired(root: FiberRoot, currentTime: number):
   }
 }
 
+export function markRootFinished(root: FiberRoot, remainingLanes: Lanes) {
+  const noLongerPendingLanes = root.pendingLanes & ~remainingLanes;
+
+  root.pendingLanes = remainingLanes;
+
+  // Let's try everything again
+  root.suspendedLanes = NoLanes;
+  root.pingedLanes = NoLanes;
+
+  root.expiredLanes &= remainingLanes;
+  root.mutableReadLanes &= remainingLanes;
+
+  root.entangledLanes &= remainingLanes;
+
+  const entanglements = root.entanglements;
+  const eventTimes = root.eventTimes;
+  const expirationTimes = root.expirationTimes;
+
+  // Clear the lanes that no longer have pending work
+  let lanes = noLongerPendingLanes;
+  while (lanes > 0) {
+    const index = pickArbitraryLaneIndex(lanes);
+    const lane = 1 << index;
+
+    entanglements[index] = NoLanes;
+    eventTimes[index] = NoTimestamp;
+    expirationTimes[index] = NoTimestamp;
+
+    lanes &= ~lane;
+  }
+}
+
 export function markRootSuspended(root: FiberRoot, suspendedLanes: Lanes) {
   root.suspendedLanes |= suspendedLanes;
   root.pingedLanes &= ~suspendedLanes;
