@@ -425,7 +425,7 @@ export function isUnsafeClassRenderPhaseUpdate(fiber: Fiber) {
 // root has work on. This function is called on every update, and right before
 // exiting a task.
 function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
-  console.log('ensureRootIsScheduled:确保FiberRoot已经被更新过');
+  console.log('ensureRootIsScheduled:确保FiberRoot已经被标记需要更新');
   const existingCallbackNode = root.callbackNode;
 
   // Check if any lanes are being starved by other work. If so, mark them as
@@ -438,7 +438,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
     root === workInProgressRoot ? workInProgressRootRenderLanes : NoLanes
   );
 
-  console.log('根据 lane判断进入哪种更新模式');
+  console.log('根据 lane判断进入哪种更新模式，nextLanes：', nextLanes);
 
   if (nextLanes === NoLanes) {
     // Special case: There's nothing to work on.
@@ -501,7 +501,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
     }
     newCallbackNode = null;
   } else {
-    console.info('performConcurrentWorkOnRoot 开始');
+    console.info('performConcurrentWorkOnRoot 开始 --- ,进入到了此处的逻辑');
 
     let schedulerPriorityLevel;
     switch (lanesToEventPriority(nextLanes)) {
@@ -528,6 +528,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   }
 
   root.callbackPriority = newCallbackPriority;
+  // read:返回来一个 scheduler 的 task
   root.callbackNode = newCallbackNode;
 }
 
@@ -1266,6 +1267,7 @@ export function markSkippedUpdateLanes(lane: Lane | Lanes): void {
 
 // 1658
 function renderRootSync(root: FiberRoot, lanes: Lanes) {
+  console.log('renderRootSync');
   const prevExecutionContext = executionContext;
   executionContext |= ExecutionContext.RenderContext;
   const prevDispatcher = pushDispatcher();
@@ -1327,6 +1329,7 @@ function workLoopSync() {
 }
 // 1743
 function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
+  console.log('renderRootConcurrent');
   const prevExecutionContext = executionContext;
   executionContext |= ExecutionContext.RenderContext;
   const prevDispatcher = pushDispatcher();
@@ -1386,10 +1389,12 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
 // 1823
 /** @noinline */
 function workLoopConcurrent() {
+  console.log('workLoopConcurrent');
   // Perform work until Scheduler asks us to yield
   while (workInProgress !== null && !shouldYield()) {
     performUnitOfWork(workInProgress);
   }
+  console.log('workLoopConcurrent 完成');
 }
 
 // 1831
@@ -1398,6 +1403,7 @@ function performUnitOfWork(unitOfWork: Fiber): void {
   // nothing should rely on this, but relying on it here means that we don't
   // need an additional field on the work in progress.
   const current = unitOfWork.alternate;
+  console.log('performUnitOfWork unitOfWork.type: ', unitOfWork.type);
 
   let next;
   if (enableProfilerTimer && (unitOfWork.mode & TypeOfMode.ProfileMode) !== TypeOfMode.NoMode) {
@@ -1411,6 +1417,7 @@ function performUnitOfWork(unitOfWork: Fiber): void {
   unitOfWork.memoizedProps = unitOfWork.pendingProps;
   if (next === null) {
     // If this doesn't spawn new work, complete the current work.
+    console.log('深度便利，已经走到一个叶子节点,开始进入completeUnitOfWork阶段');
     completeUnitOfWork(unitOfWork);
   } else {
     workInProgress = next;
@@ -1429,6 +1436,7 @@ function completeUnitOfWork(unitOfWork: Fiber): void {
     // need an additional field on the work in progress.
     const current = completedWork.alternate;
     const returnFiber: Fiber | null = completedWork.return;
+    console.log('completeUnitOfWork,completedWork.type:', completedWork.type);
 
     // Check if the work completed or if something threw.
     if ((completedWork.flags & Flags.Incomplete) === Flags.NoFlags) {
@@ -1899,6 +1907,8 @@ function flushPassiveEffectsImpl() {
   const prevExecutionContext = executionContext;
   executionContext |= ExecutionContext.CommitContext;
 
+  // 这里是先卸载之前的fiber，再重新挂载
+  // React 的 effects 在每次渲染中都会执行这两个函数
   commitPassiveUnmountEffects(root.current);
   commitPassiveMountEffects(root, root.current, lanes, transitions);
 

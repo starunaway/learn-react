@@ -266,6 +266,7 @@ function commitHookEffectListUnmount(
   finishedWork: Fiber,
   nearestMountedAncestor: Fiber | null
 ) {
+  console.log('commitHookEffectListUnmount');
   const updateQueue: FunctionComponentUpdateQueue | null = finishedWork.updateQueue as any;
   const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
   if (lastEffect !== null) {
@@ -274,6 +275,7 @@ function commitHookEffectListUnmount(
     do {
       if ((effect.tag & flags) === flags) {
         // Unmount
+        console.log('这里应该就是业务侧的 useEffect 逻辑了， effect is:', effect);
         const destroy = effect.destroy;
         effect.destroy = undefined;
         if (destroy !== undefined) {
@@ -303,6 +305,7 @@ function commitHookEffectListUnmount(
 }
 
 function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {
+  console.log('commitHookEffectListMount');
   const updateQueue: FunctionComponentUpdateQueue | null = finishedWork.updateQueue as any;
   const lastEffect = updateQueue !== null ? updateQueue.lastEffect : null;
   if (lastEffect !== null) {
@@ -320,6 +323,7 @@ function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {
         // }
 
         // Mount
+        // read: 这个create 应该就是 useEffect 的 第一个参数
         const create = effect.create;
 
         effect.destroy = create();
@@ -897,6 +901,7 @@ function getHostSibling(fiber: Fiber): Instance | null {
 
 // 1498
 function commitPlacement(finishedWork: Fiber): void {
+  console.log('commitPlacement 替换逻辑 ？：', finishedWork);
   if (!supportsMutation) {
     return;
   }
@@ -1847,6 +1852,7 @@ function commitPassiveMountEffects_begin(
   committedLanes: Lanes,
   committedTransitions: Array<Transition> | null
 ) {
+  console.log('commitPassiveMountEffects_begin');
   while (nextEffect !== null) {
     const fiber = nextEffect;
     const firstChild = fiber.child;
@@ -2043,12 +2049,14 @@ function commitPassiveMountOnFiber(
 
 //  2991
 export function commitPassiveUnmountEffects(firstChild: Fiber): void {
+  console.log('commitPassiveUnmountEffects begin');
   nextEffect = firstChild;
   commitPassiveUnmountEffects_begin();
 }
 
 function commitPassiveUnmountEffects_begin() {
   while (nextEffect !== null) {
+    console.log('commitPassiveUnmountEffects_begin nextEffect:', nextEffect);
     const fiber = nextEffect;
     const child = fiber.child;
 
@@ -2102,6 +2110,7 @@ function commitPassiveUnmountEffects_begin() {
 
 // 3053
 function commitPassiveUnmountEffects_complete() {
+  console.log('commitPassiveUnmountEffects_complete,nextEffect:', nextEffect);
   while (nextEffect !== null) {
     const fiber = nextEffect;
     if ((fiber.flags & Flags.Passive) !== Flags.NoFlags) {
@@ -2121,6 +2130,7 @@ function commitPassiveUnmountEffects_complete() {
 
 // 3073
 function commitPassiveUnmountOnFiber(finishedWork: Fiber): void {
+  console.log('commitPassiveUnmountOnFiber finishedWork:', finishedWork);
   switch (finishedWork.tag) {
     case WorkTag.FunctionComponent:
     case WorkTag.ForwardRef:

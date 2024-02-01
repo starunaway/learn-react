@@ -18,6 +18,7 @@ import { TypeOfMode } from './ReactTypeOfMode';
 import { WorkTag } from './ReactWorkTags';
 import type { Cache } from './ReactFiberCacheComponent';
 import { UpdateQueue } from './ReactFiberClassUpdateQueue';
+import { Task } from '../scheduler';
 
 // Unwind Circular: moved from ReactFiberHooks.old
 export type HookType =
@@ -192,7 +193,7 @@ type BaseFiberRootProperties = {
 
   // Node returned by Scheduler.scheduleCallback. Represents the next rendering
   // task that the root will work on.
-  callbackNode: any; // read: 这里应该是 scheduler 的 Task ？
+  callbackNode: Task | null; // read: 这里是 scheduler 的 Task
   callbackPriority: Lane;
   eventTimes: LaneMap<number>;
   expirationTimes: LaneMap<number>;

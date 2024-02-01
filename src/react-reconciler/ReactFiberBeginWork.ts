@@ -78,6 +78,7 @@ export function reconcileChildren(
   nextChildren: any,
   renderLanes: Lanes
 ) {
+  console.log('reconcileChildren current is:', current, 'workInProgress is:', workInProgress);
   if (current === null) {
     // If this is a fresh new component that hasn't been rendered yet, we
     // won't update its child set by applying minimal side-effects. Instead,
@@ -119,6 +120,7 @@ function updateFunctionComponent(
   nextProps: any,
   renderLanes: Lanes
 ) {
+  console.log('updateFunctionComponent Component:', Component);
   let context;
   if (!disableLegacyContext) {
     const unmaskedContext = getUnmaskedContext(workInProgress, Component, true);
@@ -790,6 +792,7 @@ function attemptEarlyBailoutIfNoScheduledUpdate(
 }
 
 function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: Lanes): Fiber | null {
+  console.log('beginWork,current is:', current, 'workInProgress is:', workInProgress);
   if (current !== null) {
     const oldProps = current.memoizedProps;
     const newProps = workInProgress.pendingProps;

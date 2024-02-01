@@ -68,6 +68,8 @@ if (supportsMutation) {
     needsVisibilityToggle: boolean,
     isHidden: boolean
   ) {
+    // read: 将真实的 dom 节点添加到父节点上。如果到顶了，也就添加到了 dom Container 上了
+    console.log('将真实的 dom 节点添加到父节点上');
     // We only have the top Fiber that was created but we need recurse down its
     // children to find all the terminal nodes.
     let node = workInProgress.child;
@@ -158,11 +160,13 @@ if (supportsMutation) {
 //642
 function bubbleProperties(completedWork: Fiber) {
   // 如果completedWork的（alternate）等于completedWork的child属性
+
   const didBailout =
     completedWork.alternate !== null && completedWork.alternate.child === completedWork.child;
 
   let newChildLanes = NoLanes;
   let subtreeFlags = Flags.NoFlags;
+  console.log('bubbleProperties,didBailout=', didBailout);
 
   // 不相等
   if (!didBailout) {
@@ -373,6 +377,7 @@ function completeWork(
       return null;
     }
     case WorkTag.HostComponent: {
+      console.log('complete HostComponent，也就是浏览器的dom元素, ', workInProgress.type);
       popHostContext(workInProgress);
       const rootContainerInstance = getRootHostContainer();
       const type = workInProgress.type;

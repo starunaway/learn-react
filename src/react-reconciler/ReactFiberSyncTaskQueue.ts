@@ -22,7 +22,9 @@ let includesLegacySyncCallbacks: boolean = false;
 let isFlushingSyncQueue: boolean = false;
 
 export function scheduleSyncCallback(callback: SchedulerCallback) {
-  console.log('ReactFiberSyncTaskQueue:scheduleSyncCallback 这里先将 callback 放入 queue');
+  console.log(
+    'ReactFiberSyncTaskQueue:scheduleSyncCallback 这里先将 callback 放入 queue, 在flushSyncCallbacks 里面取出来使用'
+  );
   console.log(' 应该是 performSyncWorkOnRoot');
   // Push this callback into an internal queue. We'll flush these either in
   // the next tick, or earlier if something calls `flushSyncCallbackQueue`.

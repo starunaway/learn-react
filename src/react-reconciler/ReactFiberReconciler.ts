@@ -123,6 +123,7 @@ export function updateContainer(
     scheduleUpdateOnFiber(root, current, lane, eventTime);
     console.info('scheduleUpdateOnFiber 结束');
     entangleTransitions(root, current, lane);
+    console.log('这里开始进入调度过程，也就是 react 事件循环');
   }
 
   return lane;

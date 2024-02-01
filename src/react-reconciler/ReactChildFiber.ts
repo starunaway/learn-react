@@ -197,6 +197,7 @@ export function resetWorkInProgress(workInProgress: Fiber, renderLanes: Lanes) {
 
 // 260
 // read: 没看错，这里是长达 1000 行的函数.... 主要是判断了 fiber 的各种类型
+// read: 首次 mount，不关注SideEffects
 // This wrapper function exists because I expect to clone the code in each path
 // to be able to optimize each path individually by branching early. This needs
 // a compiler or we can do it manually. Helpers that don't need this branching

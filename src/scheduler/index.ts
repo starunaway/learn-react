@@ -19,7 +19,7 @@ const LOW_PRIORITY_TIMEOUT = 10000;
 // Never times out
 const IDLE_PRIORITY_TIMEOUT = maxSigned31BitInt;
 
-interface Task {
+export interface Task {
   id: number;
   callback: Function | null; // 假设回调函数无参数
   priorityLevel: number;
@@ -224,6 +224,7 @@ function unstable_scheduleCallback(
   callback: Function,
   options?: any
 ) {
+  console.log('将待执行的任务放入队列中，并标记一个优先级');
   var currentTime = getCurrentTime();
 
   // read: 计划什么时候开始执行
@@ -462,8 +463,14 @@ function forceFrameRate(fps: number) {
 
 /**
  * 只要没过期，该函数就一直执行
+ * 本质是监听 message channel 的 onmessage 事件，然后从任务队列中取出任务执行
+ * 取出的任务就是React 的 performConcurrentWorkOnRoot
+ * 这里面又封装了一层，也就是这个文件里的 flushWork -> workloop.
+ * React 会在合成事件 or hooks 里面 调用 scheduleCallback，也就是创建了一个 postMessage 事件，这样是 React 的调度流程
+ * 亦即如果scheduleCallback 全部执行完成，React 是不执行的了
  */
 const performWorkUntilDeadline = () => {
+  console.log('这里是 scheduler 在 web 端的实现：即 onmessage');
   if (scheduledHostCallback !== null) {
     const currentTime = getCurrentTime();
     // Keep track of the start time so we can measure how long the main thread
