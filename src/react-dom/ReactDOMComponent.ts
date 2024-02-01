@@ -3,6 +3,7 @@ import {
   getHostProps as ReactDOMInputGetHostProps,
   postMountWrapper as ReactDOMInputPostMountWrapper,
   initWrapperState as ReactDOMInputInitWrapperState,
+  updateWrapper as ReactDOMInputUpdateWrapper,
 } from './ReactDOMInput';
 import { listenToNonDelegatedEvent } from './events/DOMPluginEventSystem';
 import { registrationNameDependencies } from './events/EventRegistry';
@@ -149,6 +150,7 @@ function updateDOMProperties(
   }
 }
 
+// 370
 export function createElement(
   type: string,
   props: any,
@@ -525,4 +527,50 @@ export function diffProperties(
     (updatePayload = updatePayload || []).push(STYLE, styleUpdates);
   }
   return updatePayload;
+}
+
+// 804
+// Apply the diff.
+export function updateProperties(
+  domElement: Element,
+  updatePayload: Array<any>,
+  tag: string,
+  lastRawProps: any,
+  nextRawProps: any
+): void {
+  // Update checked *before* name.
+  // In the middle of an update, it is possible to have multiple checked.
+  // When a checked radio tries to change name, browser makes another radio's checked false.
+  if (tag === 'input' && nextRawProps.type === 'radio' && nextRawProps.name != null) {
+    console.error('updateProperties radio 未实现 ');
+
+    // ReactDOMInputUpdateChecked(domElement, nextRawProps);
+  }
+
+  const wasCustomComponentTag = isCustomComponent(tag, lastRawProps);
+  const isCustomComponentTag = isCustomComponent(tag, nextRawProps);
+  // Apply the diff.
+  updateDOMProperties(domElement, updatePayload, wasCustomComponentTag, isCustomComponentTag);
+
+  // TODO: Ensure that an update gets scheduled if any of the special props
+  // changed.
+  switch (tag) {
+    case 'input':
+      // Update the wrapper around inputs *after* updating props. This has to
+      // happen after `updateDOMProperties`. Otherwise HTML5 input validations
+      // raise warnings and prevent the new value from being assigned.
+      ReactDOMInputUpdateWrapper(domElement as HTMLInputElement, nextRawProps);
+      break;
+    case 'textarea':
+      console.error('updateProperties textarea 未实现 ');
+      // ReactDOMTextareaUpdateWrapper(domElement, nextRawProps);
+      break;
+    case 'select':
+      console.error('updateProperties select 未实现 ');
+
+      // <select> value update needs to occur after <option> children
+      // reconciliation
+      // ReactDOMSelectPostUpdateWrapper(domElement, nextRawProps);
+      break;
+  }
 }

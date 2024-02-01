@@ -44,7 +44,7 @@ function finishEventHandler() {
 }
 
 export function batchedUpdates<A, R>(fn: (a?: A, b?: any) => R, a?: A, b?: any) {
-  console.log('batchedUpdates here');
+  console.log('batchedUpdates here:', a, b);
   if (isInsideEventHandler) {
     // If we are currently inside another batch, we need to wait until it
     // fully completes before restoring state.

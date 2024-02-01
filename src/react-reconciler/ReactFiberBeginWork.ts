@@ -327,6 +327,7 @@ function updateHostComponent(current: Fiber | null, workInProgress: Fiber, rende
 
   const isDirectTextChild = shouldSetTextContent(type, nextProps);
   console.log('如果可以直接更新 dom，比如是 string 或 number 类型的 children', isDirectTextChild);
+  console.log('current is :', current, 'workInProgress is:', workInProgress);
   if (isDirectTextChild) {
     // We special case a direct text child of a host node. This is a common
     // case. We won't handle it as a reified child. We will instead handle
@@ -379,7 +380,7 @@ function mountIndeterminateComponent(
   // }
 
   value = renderWithHooks(null, workInProgress, Component, props, context, renderLanes);
-  console.log('renderWithHooks 的返回值应该就是组件的 return 结果，应该是个 fiber：', value);
+  console.log('renderWithHooks 的返回值应该就是组件的 return 结果， 是个 ReactElement：', value);
   hasId = checkDidRenderIdHook();
   // read: devtools 才使用
   // if (enableSchedulingProfiler) {

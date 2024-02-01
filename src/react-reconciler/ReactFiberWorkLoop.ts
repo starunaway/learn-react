@@ -995,6 +995,7 @@ export function deferredUpdates<A>(fn: () => A): A {
 }
 
 export function batchedUpdates<A, R>(fn: (a: A) => R, a: A): R {
+  console.log('workloop -> batchedUpdates ', fn);
   const prevExecutionContext = executionContext;
   executionContext |= ExecutionContext.BatchedContext;
   try {
@@ -1942,7 +1943,7 @@ export function captureCommitPhaseError(
   nearestMountedAncestor: Fiber | null,
   error: mixed
 ) {
-  console.error('captureCommitPhaseError 未实现');
+  console.error('captureCommitPhaseError 未实现,error is:', error);
 }
 
 // 2749

@@ -5,7 +5,7 @@ import getActiveElement from './getActiveElement';
 function isTextNode(node: HTMLElement) {
   return node && node.nodeType === Node.TEXT_NODE;
 }
-function containsNode(outerNode: any, innerNode: any) {
+function containsNode(outerNode: any, innerNode: any): boolean {
   if (!outerNode || !innerNode) {
     return false;
   } else if (outerNode === innerNode) {

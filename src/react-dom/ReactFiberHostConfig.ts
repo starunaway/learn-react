@@ -8,6 +8,8 @@ import {
   createTextNode,
   diffProperties,
   setInitialProperties,
+  trapClickOnNonInteractiveElement,
+  updateProperties,
 } from './ReactDOMComponent';
 import { precacheFiberNode, updateFiberProps } from './ReactDOMComponentTree';
 import { restoreSelection, getSelectionInformation } from './ReactInputSelection';
@@ -18,6 +20,8 @@ import {
   getEventPriority,
   setEnabled as ReactBrowserEventEmitterSetEnabled,
 } from './events/ReactDOMEventListener';
+import { retryIfBlockedOn } from './events/ReactDOMEventReplaying';
+import setTextContent from './setTextContent';
 import { getChildNamespace } from './shared/DOMNamespaces';
 
 export type Type = string;
@@ -280,6 +284,106 @@ export function commitMount(
   }
 }
 
+// 449
+export function commitUpdate(
+  domElement: Instance,
+  updatePayload: Array<mixed>,
+  type: string,
+  oldProps: Props,
+  newProps: Props,
+  internalInstanceHandle: Object
+): void {
+  // Apply the diff to the DOM node.
+  updateProperties(domElement, updatePayload, type, oldProps, newProps);
+  // Update the props handle so that we know which props are the ones with
+  // with current event handlers.
+  updateFiberProps(domElement, newProps);
+}
+
+// 464
+export function resetTextContent(domElement: Instance): void {
+  setTextContent(domElement, '');
+}
+// 468
+export function commitTextUpdate(
+  textInstance: TextInstance,
+  oldText: string,
+  newText: string
+): void {
+  textInstance.nodeValue = newText;
+}
+
+export function appendChild(parentInstance: Instance, child: Instance | TextInstance): void {
+  parentInstance.appendChild(child);
+}
+
+export function appendChildToContainer(container: Container, child: Instance | TextInstance): void {
+  let parentNode;
+  if (container.nodeType === Node.COMMENT_NODE) {
+    parentNode = container.parentNode as any;
+    parentNode.insertBefore(child, container);
+  } else {
+    parentNode = container;
+    parentNode.appendChild(child);
+  }
+  // This container might be used for a portal.
+  // If something inside a portal is clicked, that click should bubble
+  // through the React tree. However, on Mobile Safari the click would
+  // never bubble through the *DOM* tree unless an ancestor with onclick
+  // event exists. So we wouldn't see it and dispatch it.
+  // This is why we ensure that non React root containers have inline onclick
+  // defined.
+  // https://github.com/facebook/react/issues/11918
+  const reactRootContainer = container._reactRootContainer;
+  if (
+    (reactRootContainer === null || reactRootContainer === undefined) &&
+    parentNode.onclick === null
+  ) {
+    // TODO: This cast may not be sound for SVG, MathML or custom elements.
+    trapClickOnNonInteractiveElement(parentNode as any as HTMLElement);
+  }
+}
+
+export function insertBefore(
+  parentInstance: Instance,
+  child: Instance | TextInstance,
+  beforeChild: Instance | TextInstance | SuspenseInstance
+): void {
+  parentInstance.insertBefore(child, beforeChild);
+}
+// 520
+export function insertInContainerBefore(
+  container: Container,
+  child: Instance | TextInstance,
+  beforeChild: Instance | TextInstance | SuspenseInstance
+): void {
+  if (container.nodeType === Node.COMMENT_NODE) {
+    (container.parentNode as any).insertBefore(child, beforeChild);
+  } else {
+    container.insertBefore(child, beforeChild);
+  }
+}
+
+// 565
+export function removeChild(
+  parentInstance: Instance,
+  child: Instance | TextInstance | SuspenseInstance
+): void {
+  parentInstance.removeChild(child);
+}
+
+// 572
+export function removeChildFromContainer(
+  container: Container,
+  child: Instance | TextInstance | SuspenseInstance
+): void {
+  if (container.nodeType === Node.COMMENT_NODE) {
+    (container.parentNode as any).removeChild(child);
+  } else {
+    container.removeChild(child);
+  }
+}
+
 // 671
 export function clearContainer(container: Container): void {
   if (container.nodeType === Node.ELEMENT_NODE) {
@@ -328,4 +432,11 @@ export function getParentSuspenseInstance(targetInstance: Node): null | Suspense
     node = node.previousSibling as Comment;
   }
   return null;
+}
+
+// 951
+export function commitHydratedContainer(container: Container): void {
+  console.log('ssr 的时候才会走到这里吧，应该不需要关注。以下逻辑未实现');
+  // Retry if any event replaying was blocked on this.
+  retryIfBlockedOn(container);
 }
