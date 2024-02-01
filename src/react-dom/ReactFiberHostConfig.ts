@@ -9,8 +9,13 @@ import {
   setInitialProperties,
 } from './ReactDOMComponent';
 import { precacheFiberNode, updateFiberProps } from './ReactDOMComponentTree';
+import { restoreSelection } from './ReactInputSelection';
+
 import { DOMEventName } from './events/DOMEventNames';
-import { getEventPriority } from './events/ReactDOMEventListener';
+import {
+  getEventPriority,
+  setEnabled as ReactBrowserEventEmitterSetEnabled,
+} from './events/ReactDOMEventListener';
 import { getChildNamespace } from './shared/DOMNamespaces';
 
 export type Type = string;
@@ -53,12 +58,20 @@ export type Container = (Element | Document | DocumentFragment) & {
   _reactRootContainer?: FiberRoot;
 } & mixed;
 
+export type SelectionInformation = {
+  focusedElem: null | HTMLElement;
+  selectionRange: mixed;
+};
+
 const SUPPRESS_HYDRATION_WARNING = 'suppressHydrationWarning';
 
 const SUSPENSE_START_DATA = '$';
 const SUSPENSE_END_DATA = '/$';
 const SUSPENSE_PENDING_START_DATA = '$?';
 const SUSPENSE_FALLBACK_START_DATA = '$!';
+
+let eventsEnabled: boolean | null = null;
+let selectionInformation: null | SelectionInformation = null;
 
 // Returns the SuspenseInstance if this node is a direct child of a
 // SuspenseInstance. I.e. if its previous sibling is a Comment with
@@ -109,6 +122,13 @@ export function getChildHostContext(
 ): HostContext {
   const parentNamespace = parentHostContext as HostContextProd;
   return getChildNamespace(parentNamespace, type);
+}
+
+export function resetAfterCommit(containerInfo: Container): void {
+  restoreSelection(selectionInformation);
+  ReactBrowserEventEmitterSetEnabled(!!eventsEnabled);
+  eventsEnabled = null;
+  selectionInformation = null;
 }
 
 export function createInstance(
