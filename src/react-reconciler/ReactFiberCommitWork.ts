@@ -324,6 +324,7 @@ function commitHookEffectListMount(flags: HookFlags, finishedWork: Fiber) {
 
         // Mount
         // read: 这个create 应该就是 useEffect 的 第一个参数
+        console.log('这个create 应该就是 useEffect 的 第一个参数', effect.create);
         const create = effect.create;
 
         effect.destroy = create();
@@ -400,6 +401,7 @@ function commitLayoutEffectOnFiber(
   finishedWork: Fiber,
   committedLanes: Lanes
 ): void {
+  console.log('开始commitLayoutEffectOnFiber');
   if ((finishedWork.flags & LayoutMask) !== Flags.NoFlags) {
     switch (finishedWork.tag) {
       case WorkTag.FunctionComponent:
@@ -942,11 +944,21 @@ function commitPlacement(finishedWork: Fiber): void {
   }
 }
 
+// read: 将待更新的 dom 真正更新的页面上。之前已经拼装好了，这里只更新一次就可以了?
+// read: 不一定? 可能有多个子树？
 function insertOrAppendPlacementNodeIntoContainer(
   node: Fiber,
   before?: Instance,
   parent?: Container
 ): void {
+  console.log(
+    'insertOrAppendPlacementNodeIntoContainer',
+    node?.type,
+    'before is:',
+    before,
+    'parent is:',
+    parent
+  );
   const { tag } = node;
   const isHost = tag === WorkTag.HostComponent || tag === WorkTag.HostText;
   if (isHost) {
@@ -974,6 +986,14 @@ function insertOrAppendPlacementNodeIntoContainer(
 }
 
 function insertOrAppendPlacementNode(node: Fiber, before?: Instance, parent?: Instance): void {
+  console.log(
+    'insertOrAppendPlacementNode',
+    node?.type,
+    'before is:',
+    before,
+    'parent is:',
+    parent
+  );
   const { tag } = node;
   const isHost = tag === WorkTag.HostComponent || tag === WorkTag.HostText;
   if (isHost) {
@@ -1009,6 +1029,7 @@ let hostParent: Instance | Container | null = null;
 let hostParentIsContainer: boolean = false;
 
 function commitDeletionEffects(root: FiberRoot, returnFiber: Fiber, deletedFiber: Fiber) {
+  console.log('commitDeletionEffects:', returnFiber, deletedFiber);
   if (supportsMutation) {
     // We only have the top Fiber that was deleted but we need to recurse down its
     // children to find all the terminal nodes.
@@ -1306,6 +1327,7 @@ function commitDeletionEffectsOnFiber(
 
 // 1981
 export function commitMutationEffects(root: FiberRoot, finishedWork: Fiber, committedLanes: Lanes) {
+  console.log('commitMutationEffects');
   inProgressLanes = committedLanes;
   inProgressRoot = root;
 
@@ -1321,6 +1343,7 @@ export function commitMutationEffects(root: FiberRoot, finishedWork: Fiber, comm
 function recursivelyTraverseMutationEffects(root: FiberRoot, parentFiber: Fiber, lanes: Lanes) {
   // Deletions effects can be scheduled on any fiber type. They need to happen
   // before the children effects hae fired.
+  console.log('recursivelyTraverseMutationEffects');
   const deletions = parentFiber.deletions;
   if (deletions !== null) {
     for (let i = 0; i < deletions.length; i++) {
@@ -1347,6 +1370,7 @@ function recursivelyTraverseMutationEffects(root: FiberRoot, parentFiber: Fiber,
 
 // 2083
 function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot, lanes: Lanes) {
+  console.log('commitMutationEffectsOnFiber,finishedWork:', finishedWork);
   const current = finishedWork.alternate;
   const flags = finishedWork.flags;
 
@@ -1691,6 +1715,7 @@ function commitMutationEffectsOnFiber(finishedWork: Fiber, root: FiberRoot, lane
 
 // 2436
 function commitReconciliationEffects(finishedWork: Fiber) {
+  console.log('commitReconciliationEffects,finishedWork:', finishedWork.type);
   // Placement effects (insertions, reorders) can be scheduled on any fiber
   // type. They needs to happen after the children effects have fired, but
   // before the effects on this fiber have fired.
@@ -1718,6 +1743,7 @@ export function commitLayoutEffects(
   root: FiberRoot,
   committedLanes: Lanes
 ): void {
+  console.log('commitLayoutEffects');
   inProgressLanes = committedLanes;
   inProgressRoot = root;
   nextEffect = finishedWork;
@@ -1732,7 +1758,7 @@ export function commitLayoutEffects(
 function commitLayoutEffects_begin(subtreeRoot: Fiber, root: FiberRoot, committedLanes: Lanes) {
   // Suspense layout effects semantics don't change for legacy roots.
   const isModernRoot = (subtreeRoot.mode & TypeOfMode.ConcurrentMode) !== TypeOfMode.NoMode;
-
+  console.log('commitLayoutEffects_begin');
   while (nextEffect !== null) {
     const fiber = nextEffect;
     const firstChild = fiber.child;
@@ -1807,6 +1833,7 @@ function commitLayoutMountEffects_complete(
   root: FiberRoot,
   committedLanes: Lanes
 ) {
+  console.log('commitLayoutMountEffects_complete');
   while (nextEffect !== null) {
     const fiber = nextEffect;
     if ((fiber.flags & LayoutMask) !== Flags.NoFlags) {

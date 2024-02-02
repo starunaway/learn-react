@@ -559,6 +559,7 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
   console.log(
     'performConcurrentWorkOnRoot: root.callbackNode 会在更新后被处理，和原始的不一样。如果一样,说明还需要处理'
   );
+  console.info('performConcurrentWorkOnRoot 内 renderRoot 开始之前 ，需要处理上一次渲染的副作用');
   const didFlushPassiveEffects = flushPassiveEffects();
   if (didFlushPassiveEffects) {
     // Something in the passive effect phase may have canceled the current task.
@@ -583,6 +584,8 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
     // Defensive coding. This is never expected to happen.
     return null;
   }
+
+  console.info('performConcurrentWorkOnRoot 内 renderRoot 开始 ，');
 
   // We disable time-slicing in some cases: if the work has been CPU-bound
   // for too long ("expired" work, to prevent starvation), or we're in
@@ -673,8 +676,9 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
   }
 
   ensureRootIsScheduled(root, now());
-  console.info('exitStatus 是RootInProgress,还需要再次执行');
   if (root.callbackNode === originalCallbackNode) {
+    console.info('root.callbackNode === originalCallbackNode,还需要再次执行');
+
     // The task node scheduled for this root is the same one that's
     // currently executed. Need to return a continuation.
     return performConcurrentWorkOnRoot.bind(null, root);
@@ -747,6 +751,7 @@ export function queueRecoverableErrors(errors: Array<CapturedValue<mixed>>) {
 
 // 1018
 function finishConcurrentRender(root: FiberRoot, exitStatus: RootExitStatus, lanes: Lane) {
+  console.log('finishConcurrentRender,exitStatus is:', exitStatus);
   switch (exitStatus) {
     case RootExitStatus.RootInProgress:
     case RootExitStatus.RootFatalErrored: {
@@ -1530,6 +1535,7 @@ function commitRoot(
   recoverableErrors: null | Array<CapturedValue<mixed>>,
   transitions: Array<Transition> | null
 ) {
+  console.log('commitRoot:The work completed. Ready to commit');
   // TODO: This no longer makes any sense. We already wrap the mutation and
   // layout phases. Should be able to remove.
   const previousUpdateLanePriority = getCurrentUpdatePriority();
@@ -1555,6 +1561,13 @@ function commitRootImpl(
   renderPriorityLevel: Lane
 ) {
   do {
+    console.log(
+      'flushPassiveEffects, 当前rootWithPendingPassiveEffects：',
+      rootWithPendingPassiveEffects
+    );
+    console.log(
+      '这里flushPassiveEffects 是在本次 dom 更新完成之后，最终还没挂载到root container 之前的处理逻辑'
+    );
     // `flushPassiveEffects` will call `flushSyncUpdateQueue` at the end, which
     // means `flushPassiveEffects` will sometimes result in additional
     // passive effects. So we need to keep flushing in a loop until there are
@@ -1834,8 +1847,11 @@ function releaseRootPooledCache(root: FiberRoot, remainingLanes: Lanes) {
 
 // 2356
 export function flushPassiveEffects(): boolean {
-  // read: 这里应该是每次更新的时候，移除之前的副作用，比如 useEffect 里的 return
-  console.log('这里应该是每次更新的时候，移除之前的副作用，比如 useEffect 里的 return');
+  // read: 该函数调用有两个时机，一个是unmount 的时候，移除上一次的 useEffect 里的 return
+  //  另一个是本次 dom 更新，但还没挂载到 root container 时，执行本次的 effect
+  console.log(
+    'flushPassiveEffects调用有两个时机，一个是unmount 的时候，移除上一次的 useEffect 里的 return \n另一个是本次 dom 更新，但还没挂载到 root container 时，执行本次的 effect'
+  );
   // Returns whether passive effects were flushed.
   // TODO: Combine this check with the one in flushPassiveEFfectsImpl. We should
   // probably just combine the two functions. I believe they were only separate

@@ -131,6 +131,7 @@ export function prepareForCommit(containerInfo: Container): null {
 
 // 236
 export function resetAfterCommit(containerInfo: Container): void {
+  console.log('resetAfterCommit');
   restoreSelection(selectionInformation);
   ReactBrowserEventEmitterSetEnabled(!!eventsEnabled);
   eventsEnabled = null;
@@ -314,10 +315,13 @@ export function commitTextUpdate(
 }
 
 export function appendChild(parentInstance: Instance, child: Instance | TextInstance): void {
+  console.log('appendChildToContainer,parentInstance:', parentInstance, 'child:', child);
+
   parentInstance.appendChild(child);
 }
 
 export function appendChildToContainer(container: Container, child: Instance | TextInstance): void {
+  console.log('appendChildToContainer,container:', container, 'child:', child);
   let parentNode;
   if (container.nodeType === Node.COMMENT_NODE) {
     parentNode = container.parentNode as any;
@@ -349,6 +353,14 @@ export function insertBefore(
   child: Instance | TextInstance,
   beforeChild: Instance | TextInstance | SuspenseInstance
 ): void {
+  console.log(
+    'insertBefore,parentInstance:',
+    parentInstance,
+    'child:',
+    child,
+    'beforeChild:',
+    beforeChild
+  );
   parentInstance.insertBefore(child, beforeChild);
 }
 // 520
@@ -357,6 +369,14 @@ export function insertInContainerBefore(
   child: Instance | TextInstance,
   beforeChild: Instance | TextInstance | SuspenseInstance
 ): void {
+  console.log(
+    'insertInContainerBefore,container:',
+    container,
+    'child:',
+    child,
+    'beforeChild:',
+    beforeChild
+  );
   if (container.nodeType === Node.COMMENT_NODE) {
     (container.parentNode as any).insertBefore(child, beforeChild);
   } else {

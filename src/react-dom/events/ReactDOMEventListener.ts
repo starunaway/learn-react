@@ -54,6 +54,7 @@ export function createEventListenerWrapperWithPriority(
       listenerWrapper = dispatchEvent;
       break;
   }
+
   return listenerWrapper.bind(null, domEventName, eventSystemFlags, targetContainer);
 }
 
