@@ -68,6 +68,12 @@ import { resolveDefaultProps } from './ReactFiberLazyComponent';
 import { RootState } from './ReactFiberRoot';
 import { shouldSetTextContent, supportsHydration } from '../react-dom/ReactFiberHostConfig';
 import { CapturedValue, createCapturedValueAtFiber } from './ReactCapturedValue';
+import {
+  createFiberFromTypeAndProps,
+  createWorkInProgress,
+  isSimpleFunctionComponent,
+} from './ReactFiber';
+import shallowEqual from '../shared/shallowEqual';
 
 let didReceiveUpdate: boolean = false;
 
@@ -99,6 +105,136 @@ export function reconcileChildren(
       renderLanes
     );
   }
+}
+
+// 452
+// read: 这里是 React.memo 返回的组件
+function updateMemoComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  Component: any,
+  nextProps: any,
+  renderLanes: Lanes
+): null | Fiber {
+  if (current === null) {
+    const type = Component.type;
+    if (
+      isSimpleFunctionComponent(type) &&
+      Component.compare === null &&
+      // SimpleMemoComponent codepath doesn't resolve outer props either.
+      Component.defaultProps === undefined
+    ) {
+      let resolvedType = type;
+
+      // If this is a plain function component without default props,
+      // and with only the default shallow comparison, we upgrade it
+      // to a SimpleMemoComponent to allow fast path updates.
+      workInProgress.tag = WorkTag.SimpleMemoComponent;
+      workInProgress.type = resolvedType;
+
+      return updateSimpleMemoComponent(
+        current,
+        workInProgress,
+        resolvedType,
+        nextProps,
+        renderLanes
+      );
+    }
+
+    const child = createFiberFromTypeAndProps(
+      Component.type,
+      null,
+      nextProps,
+      workInProgress,
+      workInProgress.mode,
+      renderLanes
+    )!;
+    child.ref = workInProgress.ref;
+    child.return = workInProgress;
+    workInProgress.child = child;
+    return child;
+  }
+
+  const currentChild = current.child as Fiber; // This is always exactly one child
+  const hasScheduledUpdateOrContext = checkScheduledUpdateOrContext(current, renderLanes);
+  if (!hasScheduledUpdateOrContext) {
+    // This will be the props with resolved defaultProps,
+    // unlike current.memoizedProps which will be the unresolved ones.
+    const prevProps = currentChild.memoizedProps;
+    // Default to shallow comparison
+    let compare = Component.compare;
+    compare = compare !== null ? compare : shallowEqual;
+    if (compare(prevProps, nextProps) && current.ref === workInProgress.ref) {
+      return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+    }
+  }
+  // React DevTools reads this flag.
+  workInProgress.flags |= Flags.PerformedWork;
+  const newChild = createWorkInProgress(currentChild, nextProps);
+  newChild.ref = workInProgress.ref;
+  newChild.return = workInProgress;
+  workInProgress.child = newChild;
+  return newChild;
+}
+
+// 552
+function updateSimpleMemoComponent(
+  current: Fiber | null,
+  workInProgress: Fiber,
+  Component: any,
+  nextProps: any,
+  renderLanes: Lanes
+): null | Fiber {
+  // TODO: current can be non-null here even if the component
+  // hasn't yet mounted. This happens when the inner render suspends.
+  // We'll need to figure out if this is fine or can cause issues.
+
+  if (current !== null) {
+    const prevProps = current.memoizedProps;
+    if (shallowEqual(prevProps, nextProps) && current.ref === workInProgress.ref) {
+      didReceiveUpdate = false;
+
+      // The props are shallowly equal. Reuse the previous props object, like we
+      // would during a normal fiber bailout.
+      //
+      // We don't have strong guarantees that the props object is referentially
+      // equal during updates where we can't bail out anyway — like if the props
+      // are shallowly equal, but there's a local state or context update in the
+      // same batch.
+      //
+      // However, as a principle, we should aim to make the behavior consistent
+      // across different ways of memoizing a component. For example, React.memo
+      // has a different internal Fiber layout if you pass a normal function
+      // component (SimpleMemoComponent) versus if you pass a different type
+      // like forwardRef (MemoComponent). But this is an implementation detail.
+      // Wrapping a component in forwardRef (or React.lazy, etc) shouldn't
+      // affect whether the props object is reused during a bailout.
+      workInProgress.pendingProps = nextProps = prevProps;
+
+      if (!checkScheduledUpdateOrContext(current, renderLanes)) {
+        // The pending lanes were cleared at the beginning of beginWork. We're
+        // about to bail out, but there might be other lanes that weren't
+        // included in the current render. Usually, the priority level of the
+        // remaining updates is accumulated during the evaluation of the
+        // component (i.e. when processing the update queue). But since since
+        // we're bailing out early *without* evaluating the component, we need
+        // to account for it here, too. Reset to the value of the current fiber.
+        // NOTE: This only applies to SimpleMemoComponent, not MemoComponent,
+        // because a MemoComponent fiber does not have hooks or an update queue;
+        // rather, it wraps around an inner component, which may or may not
+        // contains hooks.
+        // TODO: Move the reset at in beginWork out of the common path so that
+        // this is no longer necessary.
+        workInProgress.lanes = current.lanes;
+        return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
+      } else if ((current.flags & Flags.ForceUpdateForLegacySuspense) !== Flags.NoFlags) {
+        // This is a special case that only exists for legacy mode.
+        // See https://github.com/facebook/react/pull/19216.
+        didReceiveUpdate = true;
+      }
+    }
+  }
+  return updateFunctionComponent(current, workInProgress, Component, nextProps, renderLanes);
 }
 
 // 937
@@ -925,24 +1061,24 @@ function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: La
       return updateContextProvider(current, workInProgress, renderLanes);
     // case WorkTag.ContextConsumer:
     //   return updateContextConsumer(current, workInProgress, renderLanes);
-    // case WorkTag.MemoComponent: {
-    //   const type = workInProgress.type;
-    //   const unresolvedProps = workInProgress.pendingProps;
-    //   // Resolve outer props first, then resolve inner props.
-    //   let resolvedProps = resolveDefaultProps(type, unresolvedProps);
+    case WorkTag.MemoComponent: {
+      const type = workInProgress.type;
+      const unresolvedProps = workInProgress.pendingProps;
+      // Resolve outer props first, then resolve inner props.
+      let resolvedProps = resolveDefaultProps(type, unresolvedProps);
 
-    //   resolvedProps = resolveDefaultProps(type.type, resolvedProps);
-    //   return updateMemoComponent(current, workInProgress, type, resolvedProps, renderLanes);
-    // }
-    // case WorkTag.SimpleMemoComponent: {
-    //   return updateSimpleMemoComponent(
-    //     current,
-    //     workInProgress,
-    //     workInProgress.type,
-    //     workInProgress.pendingProps,
-    //     renderLanes
-    //   );
-    // }
+      resolvedProps = resolveDefaultProps(type.type, resolvedProps);
+      return updateMemoComponent(current, workInProgress, type, resolvedProps, renderLanes);
+    }
+    case WorkTag.SimpleMemoComponent: {
+      return updateSimpleMemoComponent(
+        current,
+        workInProgress,
+        workInProgress.type,
+        workInProgress.pendingProps,
+        renderLanes
+      );
+    }
     // case WorkTag.IncompleteClassComponent: {
     //   const Component = workInProgress.type;
     //   const unresolvedProps = workInProgress.pendingProps;
