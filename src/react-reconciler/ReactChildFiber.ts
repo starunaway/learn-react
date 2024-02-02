@@ -208,6 +208,12 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
       // Noop.
       return;
     }
+    console.log(
+      '标记 fiber 被删除：returnFiber：',
+      returnFiber.type,
+      'childToDelete:',
+      childToDelete
+    );
     const deletions = returnFiber.deletions;
     if (deletions === null) {
       returnFiber.deletions = [childToDelete];
@@ -892,6 +898,13 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
     element: ReactElement,
     lanes: Lanes
   ): Fiber {
+    console.log(
+      'reconcileSingleElement,returnFiber:',
+      returnFiber.type,
+      'currentFirstChild:',
+      currentFirstChild?.type,
+      element
+    );
     const key = element.key;
     let child = currentFirstChild;
     while (child !== null) {
@@ -1004,6 +1017,7 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
       }
 
       if (Array.isArray(newChild)) {
+        console.log('child 是 array,', newChild);
         return reconcileChildrenArray(returnFiber, currentFirstChild, newChild, lanes);
       }
 

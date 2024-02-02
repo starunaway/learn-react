@@ -139,6 +139,15 @@ function dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEve
   targetContainer: EventTarget,
   nativeEvent: AnyNativeEvent
 ) {
+  // console.log(
+  //   'dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay',
+
+  //   domEventName,
+  //   eventSystemFlags,
+  //   targetContainer,
+  //   nativeEvent
+  // );
+
   let blockedOn = findInstanceBlockingEvent(
     domEventName,
     eventSystemFlags,

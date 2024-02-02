@@ -70,8 +70,8 @@ const Hello3 = () => {
 };
 
 function App({ name }: { name: string }) {
-  const [list, setList] = useState<number[]>([]);
-  const [hello, setHello] = useState('');
+  // const [list, setList] = useState<number[]>([]);
+  // const [hello, setHello] = useState('');
 
   const [count1, setCount1] = useState(0);
   const [count2, setCount2] = useState(0);
@@ -84,53 +84,54 @@ function App({ name }: { name: string }) {
   //   });
   //   // 在原生js事件中不会进行批处理
   // }, []);
+
   return (
-    <div className="App">
-      {/* @ts-ignore */}
-      <Cont.Provider value={{ length: list.length }}>
-        <pre>{list.length}</pre>
-        <Leng></Leng>
-      </Cont.Provider>
-      <pre>hello {name}</pre>
-
-      <MemoHello hello={hello}></MemoHello>
-
-      {list.map((i) => {
-        return <li key={i}>{i}</li>;
-      })}
-
-      <button
-        onClick={() => {
-          setList((v) => [...v, v.length]);
-        }}
-      >
-        外面 click。长度+1 影响最上面和 Leng 的数字
-      </button>
-      <input onChange={(e) => setHello(e.target.value)}></input>
-
-      <button
-        onClick={() => {
-          setCount1((count) => count + 1);
-          setCount2((count) => count + 1);
-          // 在React事件中被批处理
-        }}
-      >
-        {`count1 is ${count1}, count2 is ${count2}`}
-      </button>
-
-      <div
-        onClick={() => {
-          setTimeout(() => {
-            setCount1((count) => count + 1);
-            setCount2((count) => count + 1);
-          });
-        }}
-      >
-        <div>count1： {count1}</div>
-        <div>count2： {count2}</div>
-      </div>
-    </div>
+    <button
+      onClick={() => {
+        setCount1((count) => count + 1);
+        setCount2((count) => count + 1);
+        // 在React事件中被批处理
+      }}
+    >
+      {`count1 is ${count1}, count2 is ${count2}`}
+    </button>
   );
+  // return (
+  //   <div className="App">
+  //     {/* @ts-ignore */}
+  //     <Cont.Provider value={{ length: list.length }}>
+  //       <pre>{list.length}</pre>
+  //       <Leng></Leng>
+  //     </Cont.Provider>
+  //     <pre>hello {name}</pre>
+
+  //     <MemoHello hello={hello}></MemoHello>
+
+  //     {list.map((i) => {
+  //       return <li key={i}>{i}</li>;
+  //     })}
+
+  //     <button
+  //       onClick={() => {
+  //         setList((v) => [...v, v.length]);
+  //       }}
+  //     >
+  //       外面 click。长度+1 影响最上面和 Leng 的数字
+  //     </button>
+  //     <input onChange={(e) => setHello(e.target.value)}></input>
+
+  //     <button
+  //       onClick={() => {
+  //         setCount1((count) => count + 1);
+  //         setCount2((count) => count + 1);
+  //         // 在React事件中被批处理
+  //       }}
+  //     >
+  //       {`count1 is ${count1}, count2 is ${count2}`}
+  //     </button>
+
+  //   </div>
+  // );
 }
 
 // 需要测试的： 1. 合成事件中同时 setstate 和 原生事件（settimeout）中setstate

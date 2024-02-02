@@ -569,6 +569,9 @@ function createDispatchListener(
     currentTarget,
   };
 }
+
+// read: 寻找用户注册的监听事件。也就是需要遍历寻找所有的 fiber 节点,直到有注册的监听事件。
+// 如果没有找到，listeners为空，也不用做其他事情了
 export function accumulateSinglePhaseListeners(
   targetFiber: Fiber | null,
   reactName: string | null,
@@ -577,6 +580,7 @@ export function accumulateSinglePhaseListeners(
   accumulateTargetOnly: boolean,
   nativeEvent: AnyNativeEvent
 ): Array<DispatchListener> {
+  // console.log('accumulateSinglePhaseListeners:', reactName, targetFiber);
   const captureName = reactName !== null ? reactName + 'Capture' : null;
   const reactEventName = inCapturePhase ? captureName : reactName;
   let listeners: Array<DispatchListener> = [];

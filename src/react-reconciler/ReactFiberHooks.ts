@@ -342,6 +342,7 @@ function mountWorkInProgressHook<MS = any>(): Hook<MS> {
 
   console.log('hook.queue 是在各个 hook mounted 里面赋值的');
 
+  //read: 这里就是链表的形式，挂载了一个个 hook，也约束了执行顺序。亦即放 if里面会报错
   if (workInProgressHook === null) {
     // This is the first hook in the list
     currentlyRenderingFiber!.memoizedState = workInProgressHook = hook;
@@ -667,6 +668,7 @@ function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateActi
     lastRenderedState: initialState as S,
   };
   hook.queue = queue;
+  // read: 在mount 阶段，useState 返回的第二个参数，绑定了 fiber 和 dispatch 方法，已经注入了上下文
   const dispatch: Dispatch<BasicStateAction<S>> = (queue.dispatch = dispatchSetState.bind(
     null,
     currentlyRenderingFiber!,
@@ -676,6 +678,7 @@ function mountState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateActi
 }
 
 function updateState<S>(initialState: (() => S) | S): [S, Dispatch<BasicStateAction<S>>] {
+  console.log('渲染阶段的 useState');
   return updateReducer(basicStateReducer, initialState);
 }
 // 1543
@@ -843,8 +846,10 @@ function dispatchReducerAction<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, act
 }
 
 //2233
+// read: 这里是 useState 返回的setState
 function dispatchSetState<S, A>(fiber: Fiber, queue: UpdateQueue<S, A>, action: A) {
   const lane = requestUpdateLane(fiber);
+  console.log('dispatchSetState,fiber:', fiber.type, fiber);
 
   const update: Update<S, A> = {
     lane,

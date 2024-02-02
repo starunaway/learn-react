@@ -44,7 +44,6 @@ function finishEventHandler() {
 }
 
 export function batchedUpdates<A, R>(fn: (a?: A, b?: any) => R, a?: A, b?: any) {
-  console.log('batchedUpdates here:', a, b);
   if (isInsideEventHandler) {
     // If we are currently inside another batch, we need to wait until it
     // fully completes before restoring state.
@@ -55,7 +54,9 @@ export function batchedUpdates<A, R>(fn: (a?: A, b?: any) => R, a?: A, b?: any) 
     return batchedUpdatesImpl(fn, a, b);
   } finally {
     isInsideEventHandler = false;
-    console.log('看下这里是最后来处理事件的绑定吗');
+    // read: 某个事件处理完成。处理完成的意思是指：1. React 合成事件搜索了是否有 dom 在监听该事件
+    // 2. 如果找到了用户注册的函数，则执行
+    // 3. 如果用户注册的函数有调用 react 的 Api，比如 setState，则标记更新。并启动一个微任务等待执行(不是调用的 scheduler)
     finishEventHandler();
   }
 }

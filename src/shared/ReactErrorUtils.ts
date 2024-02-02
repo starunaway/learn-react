@@ -27,6 +27,8 @@ export function invokeGuardedCallbackImpl<A, B, C, D, E, F, Context>(
 ) {
   const funcArgs = Array.prototype.slice.call(arguments, 3) as [A, B, C, D, E, F];
   try {
+    // read: 目前用到的地方：1. 用户注册的 dom 事件
+    console.log('invokeGuardedCallbackImpl:', func, context, funcArgs);
     func.apply(context, funcArgs);
   } catch (error) {
     // read: 这里应该用不到层层嵌套，后面简化下

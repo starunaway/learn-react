@@ -1833,7 +1833,7 @@ function commitLayoutMountEffects_complete(
   root: FiberRoot,
   committedLanes: Lanes
 ) {
-  console.log('commitLayoutMountEffects_complete');
+  console.log('commitLayoutMountEffects_complete,subtreeRoot:', subtreeRoot);
   while (nextEffect !== null) {
     const fiber = nextEffect;
     if ((fiber.flags & LayoutMask) !== Flags.NoFlags) {

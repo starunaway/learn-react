@@ -481,6 +481,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
     }
     if (supportsMicrotasks) {
       console.info('performSyncWorkOnRoot scheduleMicrotask 开始');
+      // read:scheduleMicrotask 是浏览器原生事件，启动一个微任务。
       scheduleMicrotask(() => {
         // In Safari, appending an iframe forces microtasks to run.
         // https://github.com/facebook/react/issues/22459
@@ -1001,7 +1002,6 @@ export function deferredUpdates<A>(fn: () => A): A {
 }
 
 export function batchedUpdates<A, R>(fn: (a: A) => R, a: A): R {
-  console.log('workloop -> batchedUpdates ', fn);
   const prevExecutionContext = executionContext;
   executionContext |= ExecutionContext.BatchedContext;
   try {

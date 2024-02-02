@@ -25,6 +25,8 @@ function shouldPreventMouseEvent(name: string, type: string, props: Props): bool
 }
 
 /**
+ * read: 获取 react element 上用户注册的事件， 比如 <div onClick={}></div>
+ * 先获取了 event target 对应的 fiber 节点，再获取fiber.stateNode[eventName]
  * @param {object} inst The instance, which is the source of events.
  * @param {string} registrationName Name of listener (e.g. `onClick`).
  * @return {?function} The stored callback.

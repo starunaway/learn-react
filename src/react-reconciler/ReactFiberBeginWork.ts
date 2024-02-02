@@ -84,7 +84,12 @@ export function reconcileChildren(
   nextChildren: any,
   renderLanes: Lanes
 ) {
-  console.log('reconcileChildren current is:', current, 'workInProgress is:', workInProgress);
+  console.log(
+    'reconcileChildren current is:',
+    current?.type,
+    'workInProgress is:',
+    workInProgress?.type
+  );
   if (current === null) {
     // If this is a fresh new component that hasn't been rendered yet, we
     // won't update its child set by applying minimal side-effects. Instead,

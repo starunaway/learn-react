@@ -163,9 +163,10 @@ export function getFiberCurrentPropsFromNode(
 /**
  * Given a ReactDOMComponent or ReactDOMTextComponent, return the corresponding
  * DOM node.
+ * read: 这里是根据事件的 Event.target 获取对应的DOM节点。
+ * React 合成事件中，这里都是 fiber 节点，对应的 dom 要么是 DOM 节点，要么是 Text 节点。
  */
 export function getNodeFromInstance(inst: Fiber): Instance | TextInstance {
-  console.log('getNodeFromInstance 运行时这里的 tag 一定是下面这两种吗？');
   if (inst.tag === WorkTag.HostComponent || inst.tag === WorkTag.HostText) {
     // In Fiber this, is just the state node right now. We assume it will be
     // a host component or host text.
