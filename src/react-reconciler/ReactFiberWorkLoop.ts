@@ -1247,6 +1247,7 @@ function handleError(root: FiberRoot, thrownValue: any): void {
 // read: 这里是一些 hooks。不同的触发时机，hook 还不一样
 function pushDispatcher() {
   const prevDispatcher = ReactCurrentDispatcher.current;
+  console.log('ReactCurrentDispatcher: 也就是 hook  设置成 ContextOnlyDispatcher ');
   ReactCurrentDispatcher.current = ContextOnlyDispatcher;
   if (prevDispatcher === null) {
     // The React isomorphic package does not include a default dispatcher.
@@ -1259,6 +1260,7 @@ function pushDispatcher() {
 }
 
 function popDispatcher(prevDispatcher: Dispatcher) {
+  console.log('ReactCurrentDispatcher: 也就是 hook 设置成之前的状态 ');
   ReactCurrentDispatcher.current = prevDispatcher;
 }
 

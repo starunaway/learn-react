@@ -181,6 +181,10 @@ export function renderWithHooks<Props, SecondArg>(
 
   // read: 根据 fiber 的状态和 hook 的状态 确定是重新渲染还是首次渲染
   // read: 对于无状态hooks，比如 useContext，单独一套逻辑(也就是具体实现里，单独处理) - 都是 readContext
+  console.log(
+    'ReactCurrentDispatcher: 也就是 hook  设置成 HooksDispatcherOnMount or HooksDispatcherOnUpdate'
+  );
+
   ReactCurrentDispatcher.current =
     current === null || current.memoizedState === null
       ? HooksDispatcherOnMount
@@ -215,7 +219,7 @@ export function renderWithHooks<Props, SecondArg>(
       workInProgressHook = null;
 
       workInProgress.updateQueue = null;
-
+      console.log('ReactCurrentDispatcher: 也就是 hook  设置成 HooksDispatcherOnRerender ');
       ReactCurrentDispatcher.current = HooksDispatcherOnRerender;
 
       children = Component(props, secondArg);
@@ -224,6 +228,7 @@ export function renderWithHooks<Props, SecondArg>(
 
   // We can assume the previous dispatcher is always this one, since we set it
   // at the beginning of the render phase and there's no re-entrance.
+  console.log('ReactCurrentDispatcher: 也就是 hook  设置成 ContextOnlyDispatcher');
   ReactCurrentDispatcher.current = ContextOnlyDispatcher;
 
   // This check uses currentHook so that it works the same in DEV and prod bundles.
@@ -291,6 +296,8 @@ export function bailoutHooks(current: Fiber, workInProgress: Fiber, lanes: Lanes
 export function resetHooksAfterThrow(): void {
   // We can assume the previous dispatcher is always this one, since we set it
   // at the beginning of the render phase and there's no re-entrance.
+  console.log('ReactCurrentDispatcher: 也就是 hook  设置成 ContextOnlyDispatcher ');
+
   ReactCurrentDispatcher.current = ContextOnlyDispatcher;
 
   if (didScheduleRenderPhaseUpdate) {
