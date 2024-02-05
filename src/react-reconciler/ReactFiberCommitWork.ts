@@ -70,6 +70,8 @@ let offscreenSubtreeWasHidden: boolean = false;
 
 const PossiblyWeakSet = typeof WeakSet === 'function' ? WeakSet : Set;
 
+// read:nextEffect 是一个 Fiber 节点，可以用来快速追踪 Fiber 是否有指定的 flags （比如 fiber.flags & LayoutMask ）
+// read: 这里并没有单独使用一个链表，还是复用了 fiber 本身，类似于 hook，其实是挂载到每个 fiber 上，用的时候再取出来
 let nextEffect: Fiber | null = null;
 
 // Used for Profiling builds to track updaters.
@@ -944,8 +946,8 @@ function commitPlacement(finishedWork: Fiber): void {
   }
 }
 
-// read: 将待更新的 dom 真正更新的页面上。之前已经拼装好了，这里只更新一次就可以了?
-// read: 不一定? 可能有多个子树？
+// read: 将待更新的 dom 真正更新的页面上。之前已经拼装好了，这里只更新一次就可以了
+// read:fiber 可能是 FC，所以要找到真正的 dom 类型的 fiber(存在stateNode)，比如 <div><Child><p></p></Child></div>, 中间的Child 没有stateNode
 function insertOrAppendPlacementNodeIntoContainer(
   node: Fiber,
   before?: Instance,
@@ -1327,13 +1329,14 @@ function commitDeletionEffectsOnFiber(
 
 // 1981
 export function commitMutationEffects(root: FiberRoot, finishedWork: Fiber, committedLanes: Lanes) {
-  console.log('commitMutationEffects');
+  console.log('commitMutationEffects, 一般是这里执行真实dom 更新');
   inProgressLanes = committedLanes;
   inProgressRoot = root;
 
   // setCurrentDebugFiberInDEV(finishedWork);
   commitMutationEffectsOnFiber(finishedWork, root, committedLanes);
   // setCurrentDebugFiberInDEV(finishedWork);
+  console.log('commitMutationEffects 完成, 一般是这里执行真实dom 更新');
 
   inProgressLanes = null;
   inProgressRoot = null;
@@ -1343,7 +1346,7 @@ export function commitMutationEffects(root: FiberRoot, finishedWork: Fiber, comm
 function recursivelyTraverseMutationEffects(root: FiberRoot, parentFiber: Fiber, lanes: Lanes) {
   // Deletions effects can be scheduled on any fiber type. They need to happen
   // before the children effects hae fired.
-  console.log('recursivelyTraverseMutationEffects');
+  console.log('recursivelyTraverseMutationEffects', root, parentFiber.type);
   const deletions = parentFiber.deletions;
   if (deletions !== null) {
     for (let i = 0; i < deletions.length; i++) {
@@ -1720,6 +1723,8 @@ function commitReconciliationEffects(finishedWork: Fiber) {
   // type. They needs to happen after the children effects have fired, but
   // before the effects on this fiber have fired.
   const flags = finishedWork.flags;
+  // read: 必须是 Placement 的 flag，才是更新（替换） dom
+  // read: 这里是 commit 阶段，如果不是 dom，是要在 beginwork 阶段执行的（renderWithHooks, 有执行 component 函数）
   if (flags & Flags.Placement) {
     try {
       commitPlacement(finishedWork);

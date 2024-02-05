@@ -74,7 +74,7 @@ function App({ name }: { name: string }) {
   // const [hello, setHello] = useState('');
 
   const [count1, setCount1] = useState(0);
-  const [count2, setCount2] = useState(0);
+  // const [count2, setCount2] = useState(0);
 
   // useEffect(() => {
   //   console.log('!11');
@@ -85,15 +85,41 @@ function App({ name }: { name: string }) {
   //   // 在原生js事件中不会进行批处理
   // }, []);
 
+  useEffect(() => {
+    document.body.addEventListener('click', () => {
+      console.log(1);
+      setCount1((count) => count + 1);
+      // console.log(2);
+      // setCount2((count) => count + 1);
+      // console.log(3);
+    });
+    // 在原生js事件中不会进行批处理
+  }, []);
+  console.log('Render');
+
   return (
     <button
-      onClick={() => {
-        setCount1((count) => count + 1);
-        setCount2((count) => count + 1);
-        // 在React事件中被批处理
-      }}
+    // onClick={() => {
+    //   console.log(1);
+    //   setCount1((count) => count + 1);
+    //   console.log(2);
+    //   setCount2((count) => count + 1);
+    //   console.log(3);
+    //   // 在React事件中被批处理
+    // }}
+    // onClick={() => {
+    //   setTimeout(() => {
+    //     console.log(1);
+    //     setCount1((count) => count + 1);
+    //     // console.log(2);
+    //     // setCount1((count) => count + 1);
+    //     // console.log(3);
+    //   });
+    // 在 setTimeout 中不会进行批处理
+    // }}
     >
-      {`count1 is ${count1}, count2 is ${count2}`}
+      {count1 % 2 == 0 ? 1 : '1'}
+      {/* {`count1 is ${count1}, count2 is ${count2}`} */}
     </button>
   );
   // return (
@@ -194,3 +220,11 @@ function App({ name }: { name: string }) {
 // }
 
 export default App;
+
+// 1. 原生事件中，有无合并更新
+//     --- > 合并更新了，会先打上标记，调用 scheduler 更新，在 beginWork renderWithHooks 里更新(指的是更新该组件的属性)
+//           在 completeWork 里，给 fiber 打上各种标记
+//           在 commitWork 里，真正渲染
+// 2. memo 是怎么处理的
+// 3. array child diff，应该是在 rencociler 里
+// 4. 严格模式，effect 执行两次

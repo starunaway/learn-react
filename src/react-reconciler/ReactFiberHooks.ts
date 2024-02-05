@@ -545,6 +545,9 @@ function updateReducer<S, I, A>(
 
         // Process this update.
         if (update!.hasEagerState) {
+          // read: 如果已经有过了，则直接使用
+          // 比如 连续两个 setState(v=>v+1);setState(v=>v+1); 第一个会被标记为eager，第二个不会
+          // 每次触发的时候，会在对应的 fiber 上打上标记，在 performUnitOfWork 内执行的时候，会将 eagerState 赋值给 hook.memoizedState
           // If this update is a state update (not a reducer) and was processed eagerly,
           // we can use the eagerly computed state
           newState = update!.eagerState;
@@ -565,6 +568,7 @@ function updateReducer<S, I, A>(
     // Mark that the fiber performed work, but only if the new state is
     // different from the current state.
     if (!Object.is(newState, hook.memoizedState)) {
+      // read: reducer 更新 -> 本质是告诉 beginWork有更新
       markWorkInProgressReceivedUpdate();
     }
 

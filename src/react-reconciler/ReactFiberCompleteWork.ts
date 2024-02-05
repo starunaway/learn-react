@@ -112,6 +112,18 @@ if (supportsMutation) {
     // If we have an alternate, that means this is an update and we need to
     // schedule a side-effect to do the updates.
     const oldProps = current.memoizedProps;
+    console.log(
+      'updateHostComponent,current:',
+      current.type,
+      'workInProgress:',
+      workInProgress.type,
+      'oldProps:',
+      oldProps,
+      'newProps:',
+      newProps,
+      'oldProps === newProps:',
+      oldProps === newProps
+    );
     if (oldProps === newProps) {
       // In mutation mode, this is sufficient for a bailout because
       // we won't touch this node even if children changed.
@@ -135,7 +147,10 @@ if (supportsMutation) {
       rootContainerInstance,
       currentHostContext
     );
-    console.log('这里可能有错误, 类型对不上prepareUpdate:', updatePayload);
+
+    console.log(
+      "updateHostComponent, 一般是更新原生 dom 下的内容，给原生 dom 设置属性。如果是'children'，则会多次走到这里来 "
+    );
     // TODO: Type this specific to this type of component.
     workInProgress.updateQueue = updatePayload! as unknown as UpdateQueue<any>;
     // If the update payload indicates that there is a change or if there
@@ -381,7 +396,9 @@ function completeWork(
       popHostContext(workInProgress);
       const rootContainerInstance = getRootHostContainer();
       const type = workInProgress.type;
+      //  有stateNode(指向真实 dom)，current 存在，说明是更新
       if (current !== null && workInProgress.stateNode != null) {
+        //  处理newProps， workInProgress.updateQueue = updatePayload   ，updateQueue 最后会在 commit 阶段使用
         updateHostComponent(current, workInProgress, type, newProps, rootContainerInstance);
 
         if (current.ref !== workInProgress.ref) {
@@ -420,6 +437,7 @@ function completeWork(
           //   markUpdate(workInProgress);
           // }
         } else {
+          //  创建 dom
           const instance = createInstance(
             type,
             newProps,

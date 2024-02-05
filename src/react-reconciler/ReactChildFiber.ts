@@ -269,6 +269,7 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
     return clone;
   }
 
+  // read: 这里是 Fiber 需要更新的操作。如果是删除，在进入placeChild之前就已经处理过了
   function placeChild(newFiber: Fiber, lastPlacedIndex: number, newIndex: number): number {
     newFiber.index = newIndex;
     if (!shouldTrackSideEffects) {
@@ -278,17 +279,21 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
       return lastPlacedIndex;
     }
     const current = newFiber.alternate;
+    //  如果有alternate，说明新老fiber有关联，可以更新
     if (current !== null) {
       const oldIndex = current.index;
+      //  Fiber 有移动
       if (oldIndex < lastPlacedIndex) {
         // This is a move.
         newFiber.flags |= Flags.Placement;
         return lastPlacedIndex;
       } else {
+        //  Fiber 无移动
         // This item can stay in place.
         return oldIndex;
       }
     } else {
+      //  否则，需要插入一个
       // This is an insertion.
       newFiber.flags |= Flags.Placement;
       return lastPlacedIndex;
@@ -298,6 +303,8 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
   function placeSingleChild(newFiber: Fiber): Fiber {
     // This is simpler for the single child case. We only need to do a
     // placement for inserting new children.
+    // read: newFiber.alternate === null 说明是新创建的。shouldTrackSideEffects 需要追踪 effect，意味着需要插入
+    // read: shouldTrackSideEffects 是 用来区分 mount/update, mount情况下是新创建且不需要Flags.Placement
     if (shouldTrackSideEffects && newFiber.alternate === null) {
       newFiber.flags |= Flags.Placement;
     }
@@ -481,6 +488,7 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
     if (typeof newChild === 'object' && newChild !== null) {
       switch (newChild.$$typeof) {
         case REACT_ELEMENT_TYPE: {
+          // 如果 key 相等，可复用
           if (newChild.key === key) {
             return updateElement(returnFiber, oldFiber, newChild, lanes);
           } else {
@@ -571,6 +579,7 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
     return knownKeys;
   }
 
+  // read: React Diff 算法，只针对了数组
   function reconcileChildrenArray(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,
@@ -610,6 +619,7 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
       } else {
         nextOldFiber = oldFiber.sibling;
       }
+      //  比较 oldFiber  和 newChildren[newIdx] (新 Fiber) 是否可复用
       const newFiber = updateSlot(returnFiber, oldFiber, newChildren[newIdx], lanes);
       if (newFiber === null) {
         // TODO: This breaks on empty slots like null children. That's
@@ -622,7 +632,9 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
         break;
       }
       if (shouldTrackSideEffects) {
+        // read: 新 Fiber 的alternate 没有，说明 新老 Fiber 没关系。老的可以删掉了
         if (oldFiber && newFiber.alternate === null) {
+          // 这里是看起来能复用，但alternate 不存在，说明 fiber 并没有真正的复用，需要删掉
           // We matched the slot, but we didn't reuse the existing fiber, so we
           // need to delete the existing child.
           deleteChild(returnFiber, oldFiber);
@@ -643,6 +655,7 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
       oldFiber = nextOldFiber;
     }
 
+    // 新的比老的少，把老的多余的删掉
     if (newIdx === newChildren.length) {
       // We've reached the end of the new children. We can delete the rest.
       deleteRemainingChildren(returnFiber, oldFiber);
@@ -652,7 +665,7 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
       }
       return resultingFirstChild;
     }
-
+    // 如果老的比新的少，要创建
     if (oldFiber === null) {
       // If we don't have any more existing children we can choose a fast path
       // since the rest will all be insertions.
@@ -969,6 +982,7 @@ function ChildReconciler(shouldTrackSideEffects: boolean) {
   // This API will tag the children with the side-effect of the reconciliation
   // itself. They will be added to the side-effect list as we pass through the
   // children and the parent.
+  // read: 这里就是 React Diff 了 （入口）
   function reconcileChildFibers(
     returnFiber: Fiber,
     currentFirstChild: Fiber | null,

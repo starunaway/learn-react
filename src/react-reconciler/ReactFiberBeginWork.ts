@@ -170,6 +170,7 @@ function updateMemoComponent(
     let compare = Component.compare;
     compare = compare !== null ? compare : shallowEqual;
     if (compare(prevProps, nextProps) && current.ref === workInProgress.ref) {
+      // read:被 memo 包裹的组件，这里比较了 props，如果一样，尽快返回
       return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
     }
   }
@@ -290,6 +291,8 @@ function updateFunctionComponent(
   //   markComponentRenderStopped();
   // }
 
+  // read: 已经存在 ，且没有更新，可以复用
+  // didReceiveUpdate 只在这里用到了，其他地方是赋值
   if (current !== null && !didReceiveUpdate) {
     bailoutHooks(current, workInProgress, renderLanes);
     return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
@@ -603,6 +606,7 @@ function updateContextProvider(current: Fiber | null, workInProgress: Fiber, ren
       if (Object.is(oldValue, newValue)) {
         // No change. Bailout early if children are the same.
         if (oldProps.children === newProps.children && !hasLegacyContextChanged()) {
+          // read: context 的 props 和 children 都没有改变，可以直接复用
           return bailoutOnAlreadyFinishedWork(current, workInProgress, renderLanes);
         }
       } else {
@@ -651,6 +655,8 @@ function bailoutOnAlreadyFinishedWork(
   renderLanes: Lanes
 ): Fiber | null {
   console.log('组件没有待处理的工作，尽早返回');
+  // read: 如果子节点不需要更新，return null
+  // 否则，cloneChildFibers(子节点复用) 放到 workInProgress.child，并返回
   if (current !== null) {
     // Reuse previous dependencies
     workInProgress.dependencies = current.dependencies;
@@ -938,7 +944,16 @@ function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: La
     const oldProps = current.memoizedProps;
     const newProps = workInProgress.pendingProps;
 
-    if (oldProps !== newProps || hasLegacyContextChanged()) {
+    //  如果 props 改变，说明有更新
+    if (
+      oldProps !== newProps ||
+      hasLegacyContextChanged()
+
+      //read: 在开发环境下，由于修改代码，这里的type 可能会改变。但只在开发环境下，这里可能会改变，比如 p 标签换成 div 标签
+      // read: 正式环境下不会出现，原因是开发环境下有 react 热更新，会复用之前的 fiber.props，而正式环境没有热更新逻辑,整个
+      // Force a re-render if the implementation changed due to hot reload:
+      // (__DEV__ ? workInProgress.type !== current.type : false)
+    ) {
       // If props or context changed, mark the fiber as having performed work.
       // This may be unset if the props are determined to be equal later (memo).
       didReceiveUpdate = true;
@@ -962,6 +977,7 @@ function beginWork(current: Fiber | null, workInProgress: Fiber, renderLanes: La
       }
       if ((current.flags & Flags.ForceUpdateForLegacySuspense) !== Flags.NoFlags) {
         // This is a special case that only exists for legacy mode.
+        // read: 如果是 forceUpdate，也需要更新。但这里只在legacy mode下有，concurrent 应该不会触发了
         // See https://github.com/facebook/react/pull/19216.
         didReceiveUpdate = true;
       } else {
