@@ -148,14 +148,18 @@ function workLoop(hasTimeRemaining: boolean, initialTime: number) {
       const continuationCallback = callback(didUserCallbackTimeout);
       currentTime = getCurrentTime();
       if (typeof continuationCallback === 'function') {
+        // 如果还有cb，则更新一下当前的currentTask
         currentTask.callback = continuationCallback;
       } else {
+        // 这里没有 cb 了，并且currentTask 是当前任务队列
         if (currentTask === peek(taskQueue)) {
+          // 需要把该 task 移除
           pop(taskQueue);
         }
       }
       advanceTimers(currentTime);
     } else {
+      // 本身没有callback(注册的待调度事件)，也可以移除了
       pop(taskQueue);
     }
     currentTask = peek(taskQueue);

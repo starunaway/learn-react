@@ -757,6 +757,7 @@ function detachFiberMutation(fiber: Fiber) {
   // Don't reset the alternate yet, either. We need that so we can detach the
   // alternate's fields in the passive phase. Clearing the return pointer is
   // sufficient for findDOMNode semantics.
+  // read: 这里是用来释放内存
   const alternate = fiber.alternate;
   if (alternate !== null) {
     alternate.return = null;
@@ -1223,6 +1224,7 @@ function commitDeletionEffectsOnFiber(
             const firstEffect = lastEffect.next;
 
             let effect = firstEffect;
+            // 这里是删除 fiber。如果 effect 有 destroy，就调用 destroy。
             do {
               const { destroy, tag } = effect || {};
               if (destroy !== undefined) {

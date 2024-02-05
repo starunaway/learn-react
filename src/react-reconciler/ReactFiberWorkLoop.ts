@@ -442,9 +442,11 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
 
   if (nextLanes === NoLanes) {
     // Special case: There's nothing to work on.
+    // 之前存在 scheduler 的 task，但是没有啥要做的
     if (existingCallbackNode !== null) {
       cancelCallback(existingCallbackNode);
     }
+    // callbackNode 是 scheduler 的 task
     root.callbackNode = null;
     root.callbackPriority = Lane.NoLane;
     return;
@@ -461,6 +463,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   }
 
   if (existingCallbackNode != null) {
+    // 之前存在 scheduler 的 task，但是没有这一次的优先级高，则取消掉之前的
     // Cancel the existing callback. We'll schedule a new one below.
     cancelCallback(existingCallbackNode);
   }
@@ -469,6 +472,7 @@ function ensureRootIsScheduled(root: FiberRoot, currentTime: number) {
   let newCallbackNode;
   console.log('performConcurrentWorkOnRoot 和 performSyncWorkOnRoot 只会触发一个');
   console.log('流程里面，应该先移除之前的 effect 副作用，然后再更新');
+  // read: 在 React 合成事件里，这个地方被标记了SyncLane，会直接开始执行
   if (newCallbackPriority === Lane.SyncLane) {
     console.info('performSyncWorkOnRoot 开始');
     // Special case: Sync React callbacks are scheduled on a special
@@ -677,6 +681,8 @@ function performConcurrentWorkOnRoot(root: FiberRoot, didTimeout?: boolean): nul
   }
 
   ensureRootIsScheduled(root, now());
+  // read:中间 yield 了，也就是把 CPU 时间交还到了浏览器，这里 callbackNode 没有更新，所以要返回一个函数，在 scheduler 继续执行
+  // read: scheduler 里面：const continuationCallback = callback(didUserCallbackTimeout);
   if (root.callbackNode === originalCallbackNode) {
     console.info('root.callbackNode === originalCallbackNode,还需要再次执行');
 
@@ -1398,6 +1404,7 @@ function renderRootConcurrent(root: FiberRoot, lanes: Lanes) {
 function workLoopConcurrent() {
   console.log('workLoopConcurrent');
   // Perform work until Scheduler asks us to yield
+  // read:这里就是事件切片，会在执行完每一个 Fiber 后，看一下是否还有剩余的时间
   while (workInProgress !== null && !shouldYield()) {
     performUnitOfWork(workInProgress);
   }
@@ -1556,6 +1563,7 @@ function commitRoot(
 }
 
 // 1985
+// read: 主要是 3 大逻辑: commitBeforeMutationEffects   commitMutationEffects   commitLayoutEffects
 function commitRootImpl(
   root: FiberRoot,
   recoverableErrors: null | Array<CapturedValue<mixed>>,

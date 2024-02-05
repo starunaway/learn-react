@@ -80,10 +80,12 @@ export type FunctionComponentUpdateQueue = {
 };
 
 export type Hook<S = any> = {
+  //  记录的是各种 hook 的状态
   memoizedState: S | null;
   baseState: S | null;
   baseQueue: Update<any, any> | null;
   queue: UpdateQueue<any, any> | null;
+  // 记录下一个 hook。也就是这里追踪了hook 不能写 if 里面，因为next会对应不起来
   next: Hook<S> | null;
 };
 
